@@ -1,0 +1,38 @@
+// 데모용 샘플 데이터. Google Places 키가 없을 때 폴백으로 사용됩니다.
+// rating/reviews 는 샘플 값이며 실제 서비스에서는 Google Places 평점으로 대체됩니다.
+export const MOCK = [
+  { id: 'm1', name: '을지로 평양냉면', region: '서울 중구', cat: '면', price: '₩₩', rating: 4.8, reviews: 2015, color: '#f3a86b', icon: '🍜', lng: 126.99, lat: 37.57,
+    reviews_list: [{ who: '미식가J', t: '국물이 깔끔하고 면발이 예술. 줄 서서 먹을 가치 있어요.' }, { who: '냉면러버', t: '슴슴한데 자꾸 생각나는 맛. 재방문 의사 100%.' }] },
+  { id: 'm2', name: '제주 흑돼지 본점', region: '제주 제주시', cat: '고기', price: '₩₩₩', rating: 4.7, reviews: 1530, color: '#9bcf8a', icon: '🥓', lng: 126.53, lat: 33.50,
+    reviews_list: [{ who: '여행중', t: '두툼한 흑돼지 두께가 다르다. 멜젓에 찍어먹으면 끝.' }, { who: '고기파', t: '기름이 고소하고 잡내 하나 없음.' }] },
+  { id: 'm3', name: '자갈치 회센터', region: '부산 중구', cat: '횟집', price: '₩₩', rating: 4.5, reviews: 862, color: '#7cb6e8', icon: '🐟', lng: 129.03, lat: 35.10,
+    reviews_list: [{ who: '부산토박이', t: '신선도가 최고. 가격도 착하고 양도 많아요.' }] },
+  { id: 'm4', name: '전주 한옥 비빔밥', region: '전북 전주', cat: '한식', price: '₩', rating: 4.4, reviews: 1204, color: '#e98f8f', icon: '🍲', lng: 127.15, lat: 35.82,
+    reviews_list: [{ who: '한식좋아', t: '나물이 정갈하고 고추장이 일품. 한옥 분위기도 좋음.' }] },
+  { id: 'm5', name: '대구 따로국밥 노포', region: '대구 중구', cat: '한식', price: '₩', rating: 4.3, reviews: 640, color: '#c9a3e0', icon: '🍚', lng: 128.60, lat: 35.87,
+    reviews_list: [{ who: '국밥귀신', t: '칼칼한 국물에 해장 끝. 40년 노포의 내공.' }] },
+  { id: 'm6', name: '광장시장 빈대떡', region: '서울 종로', cat: '한식', price: '₩', rating: 4.6, reviews: 1820, color: '#f0b96b', icon: '🫓', lng: 126.99, lat: 37.57,
+    reviews_list: [{ who: '시장투어', t: '바삭하고 고소한 녹두전, 막걸리랑 환상.' }] },
+  { id: 'm7', name: '속초 물회 명가', region: '강원 속초', cat: '횟집', price: '₩₩', rating: 4.5, reviews: 730, color: '#6fbfd6', icon: '🦐', lng: 128.59, lat: 38.21,
+    reviews_list: [{ who: '동해바다', t: '새콤달콤 시원한 물회, 여름에 최고.' }] },
+  { id: 'm8', name: '춘천 닭갈비 골목', region: '강원 춘천', cat: '고기', price: '₩₩', rating: 4.2, reviews: 980, color: '#e8a25c', icon: '🍗', lng: 127.73, lat: 37.88,
+    reviews_list: [{ who: '닭갈비러', t: '양념이 진하고 떡이 쫄깃. 볶음밥 필수.' }] },
+  { id: 'm9', name: '대전 성심당 본점', region: '대전 중구', cat: '카페', price: '₩', rating: 4.7, reviews: 3120, color: '#d6a3c9', icon: '🥐', lng: 127.38, lat: 36.35,
+    reviews_list: [{ who: '빵순이', t: '튀김소보로는 진리. 웨이팅 있지만 빠르게 빠져요.' }] },
+  { id: 'm10', name: '통영 충무김밥', region: '경남 통영', cat: '한식', price: '₩', rating: 4.3, reviews: 510, color: '#8fc8a0', icon: '🍙', lng: 128.42, lat: 34.85,
+    reviews_list: [{ who: '남해여행', t: '오징어무침이랑 같이 먹으니 꿀맛.' }] },
+  { id: 'm11', name: '강릉 초당순두부', region: '강원 강릉', cat: '한식', price: '₩', rating: 4.5, reviews: 1340, color: '#a9d0b0', icon: '🥣', lng: 128.90, lat: 37.75,
+    reviews_list: [{ who: '두부사랑', t: '고소한 순두부와 바다 풍경. 아침 식사로 완벽.' }] },
+  { id: 'm12', name: '여수 게장백반', region: '전남 여수', cat: '한식', price: '₩₩', rating: 4.6, reviews: 1090, color: '#e9a0a0', icon: '🦀', lng: 127.66, lat: 34.76,
+    reviews_list: [{ who: '밥도둑', t: '간장게장에 밥 세 공기 순삭. 짜지 않고 감칠맛.' }] },
+  { id: 'm13', name: '인천 차이나타운 짜장', region: '인천 중구', cat: '면', price: '₩', rating: 4.1, reviews: 760, color: '#e0a35c', icon: '🥢', lng: 126.70, lat: 37.45,
+    reviews_list: [{ who: '중식파', t: '수타면이 쫄깃하고 춘장이 달큰. 원조의 맛.' }] },
+  { id: 'm14', name: '안동 찜닭 거리', region: '경북 안동', cat: '고기', price: '₩₩', rating: 4.2, reviews: 560, color: '#d8a86b', icon: '🍲', lng: 128.73, lat: 36.57,
+    reviews_list: [{ who: '찜닭매니아', t: '매콤달콤 간장 양념에 당면이 끝내줌.' }] },
+  { id: 'm15', name: '수원 왕갈비', region: '경기 수원', cat: '고기', price: '₩₩₩', rating: 4.4, reviews: 1410, color: '#c98f6b', icon: '🍖', lng: 127.03, lat: 37.26,
+    reviews_list: [{ who: '갈비왕', t: '크기에 압도되고 부드러움에 또 놀람.' }] },
+  { id: 'm16', name: '부산 밀면 본가', region: '부산 부산진', cat: '면', price: '₩', rating: 4.3, reviews: 890, color: '#7fb8d8', icon: '🍜', lng: 129.05, lat: 35.16,
+    reviews_list: [{ who: '밀면홀릭', t: '쫄깃한 면에 시원한 육수. 부산 오면 무조건.' }] },
+]
+
+export const CATEGORIES = ['전체', '한식', '고기', '횟집', '면', '카페']
