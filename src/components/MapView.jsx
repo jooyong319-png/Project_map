@@ -106,9 +106,10 @@ function ZoomWatcher({ onZoomOut, onZoom, onBounds, onMoving }) {
 }
 
 // 내 위치가 바뀌면 그 좌표로 부드럽게 이동
+// (마운트 시엔 안 움직이게 prev 를 현재 loc 으로 초기화 — 나라 이동 등으로 리마운트돼도 내 위치로 안 튐)
 function FlyToLoc({ loc }) {
   const map = useMap()
-  const prev = useRef(null)
+  const prev = useRef(loc)
   useEffect(() => {
     if (loc && loc !== prev.current) {
       map.flyTo(loc, Math.max(map.getZoom(), 15), { duration: 0.8 })
