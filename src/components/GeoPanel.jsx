@@ -37,6 +37,25 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
   const handleCountryClick = (c) => enterWithFly(c.center, () => { onReset && onReset(c.name); openRegion(c) })
   const handleZoomThrough = (c) => { const r = c || DEFAULT_REGION; onReset && onReset(r.name); openRegion(r) }
 
+  // 내 위치 (지구본/지도 어디서든) — 지구본이면 지도로 진입, 지도면 그 좌표로 이동
+  const [myLoc, setMyLoc] = useState(null)
+  const [locating, setLocating] = useState(false)
+  const locateMe = () => {
+    if (!navigator.geolocation) { alert('이 브라우저는 위치 정보를 지원하지 않아요.'); return }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude
+        setMyLoc([lat, lng])
+        setLocating(false)
+        if (view === 'globe') enterWithFly([lng, lat], () => openRegion({ center: [lng, lat], zoom: 15 }))
+        // 지도면 MapView 의 FlyToLoc 가 이동
+      },
+      () => { setLocating(false); alert('위치를 가져오지 못했어요. 권한을 허용했는지 확인해 주세요.') },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
+    )
+  }
+
   // 나라 필터 + 검색 → 그 나라로 이동 (리셋 없이, Home 이 이미 검색 커밋)
   const prevNav = useRef(null)
   useEffect(() => {
@@ -98,6 +117,7 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
             onSearchArea={onAreaSearch}
             onBounds={onBounds}
             onMoving={onMoving}
+            myLoc={myLoc}
             searching={loading}
             limit={limit}
             initialCenter={mapStart?.center}
@@ -105,6 +125,13 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
           />
         </div>
       )}
+      <button className="locate-btn" onClick={locateMe} disabled={locating} title="내 위치" aria-label="내 위치">
+        {locating ? <span className="spin dark" /> : (
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z" />
+          </svg>
+        )}
+      </button>
     </div>
   )
 }

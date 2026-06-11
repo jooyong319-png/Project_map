@@ -105,7 +105,20 @@ function ZoomWatcher({ onZoomOut, onZoom, onBounds, onMoving }) {
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, searching, limit = 10, initialCenter, initialZoom }) {
+// 내 위치가 바뀌면 그 좌표로 부드럽게 이동
+function FlyToLoc({ loc }) {
+  const map = useMap()
+  const prev = useRef(null)
+  useEffect(() => {
+    if (loc && loc !== prev.current) {
+      map.flyTo(loc, Math.max(map.getZoom(), 15), { duration: 0.8 })
+    }
+    prev.current = loc
+  }, [loc, map])
+  return null
+}
+
+export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, searching, limit = 10, initialCenter, initialZoom }) {
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
   const points = valid.map((d) => [d.lat, d.lng])
   const mapRef = useRef(null)
@@ -134,24 +147,6 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
     onSearchArea([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()])
   }
 
-  // 내 위치로 이동 (브라우저 Geolocation)
-  const [myLoc, setMyLoc] = useState(null)
-  const [locating, setLocating] = useState(false)
-  const locateMe = () => {
-    if (!navigator.geolocation) { alert('이 브라우저는 위치 정보를 지원하지 않아요.'); return }
-    setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const c = [pos.coords.latitude, pos.coords.longitude]
-        setMyLoc(c)
-        const map = mapRef.current
-        if (map) map.flyTo(c, Math.max(map.getZoom(), 15), { duration: 0.8 })
-        setLocating(false)
-      },
-      () => { setLocating(false); alert('위치를 가져오지 못했어요. 권한을 허용했는지 확인해 주세요.') },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
-    )
-  }
 
   return (
    <>
@@ -169,6 +164,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       <FitBounds points={points} skip={!!initialCenter} />
       <FocusOnSelect items={valid} selected={selected} />
       <ZoomWatcher onZoomOut={onZoomOut} onZoom={setZoom} onBounds={onBounds} onMoving={onMoving} />
+      <FlyToLoc loc={myLoc} />
       {selItem && (
         <CircleMarker
           center={[selItem.lat, selItem.lng]}
@@ -192,13 +188,6 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
         </Marker>
       ))}
     </MapContainer>
-    <button className="locate-btn" onClick={locateMe} disabled={locating} title="내 위치" aria-label="내 위치">
-      {locating ? <span className="spin dark" /> : (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z" />
-        </svg>
-      )}
-    </button>
     {onSearchArea && (
       canSearch ? (
         <button className="area-search" onClick={searchHere} disabled={searching}>
