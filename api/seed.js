@@ -6,21 +6,12 @@
 //    (구글 ToS: 평점/사진 등은 최대 30일 캐시 허용. 좌표/태그는 우리 판정이라 영구 저장.)
 // ⚠️ 파일 쓰기는 로컬(dev)에서만 — Vercel prod 는 읽기전용이라 매번 라이브로 폴백.
 
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { enrichWithGoogle, catFromKakao, ICON_BY_CAT } from './kakao.js'
 import { naverTags, matjipCutoff, isMatjip } from './naver.js'
 import { cachedEnrich } from './gcache.js'
+import { seedAll, seedUpsert, scannedAll, scannedAdd } from './store.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = path.join(__dirname, '..', 'src', 'data')
-const SEED_PATH = path.join(DATA_DIR, 'seed.json')
-const SCAN_PATH = path.join(DATA_DIR, 'seedScanned.json')
-const LIVE_MAX = 36 // 라이브 스캔 때 리뷰 태깅할 최대 가게 수(비용 상한)
-
-function readJson(p, fallback) { try { return JSON.parse(fs.readFileSync(p, 'utf8')) } catch (_) { return fallback } }
-function writeJson(p, v) { try { fs.writeFileSync(p, JSON.stringify(v, null, 2) + '\n', 'utf8'); return true } catch (_) { return false } }
+const LIVE_MAX = 36 // 라이브 스캔 때 태깅할 최대 가게 수(비용 상한)
 
 // 이미 분석한(스캔한) 지역 근처인지 — 중심 좌표가 ~2km 내면 '커버됨'으로 본다
 function scannedNear(center, scans) {
@@ -76,23 +67,25 @@ export default async function handler(req, res) {
   }
   const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 50)
 
-  let seed = readJson(SEED_PATH, [])
+  let seed = await seedAll()
 
   // 이 지역을 아직 분석한 적 없으면 라이브 스캔(네이버 태깅) 후 자동 저장
   if (box && kkey && nid && nsec) {
     const center = { lng: (box.w + box.e) / 2, lat: (box.s + box.n) / 2 }
-    const scans = readJson(SCAN_PATH, [])
+    const scans = await scannedAll()
     if (!scannedNear(center, scans)) {
       try {
         const found = await liveScan(box, kkey, nid, nsec)
         const byId = new Map(seed.map((p) => [p.id, p]))
-        for (const f of found) {
+        const rows = found.map((f) => {
           const prev = byId.get(f.id)
-          byId.set(f.id, prev ? { ...prev, tags: [...new Set([...(prev.tags || []), ...f.tags])], blog: f.blog } : f)
-        }
+          const merged = prev ? { ...prev, tags: [...new Set([...(prev.tags || []), ...f.tags])], blog: f.blog } : f
+          byId.set(f.id, merged)
+          return merged
+        })
         seed = [...byId.values()]
-        writeJson(SEED_PATH, seed)
-        writeJson(SCAN_PATH, [...scans, center])
+        await seedUpsert(rows)
+        await scannedAdd(center)
       } catch (_) { /* 라이브 실패 시 기존 시드로 진행 */ }
     }
   }

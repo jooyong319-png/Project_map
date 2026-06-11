@@ -11,11 +11,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { catFromKakao, ICON_BY_CAT } from '../api/kakao.js'
 import { naverTags, matjipCutoff, isMatjip } from '../api/naver.js'
+import { seedAll, seedUpsert, scannedAll, scannedAdd, usingSupabase } from '../api/store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
-const SEED_PATH = path.join(ROOT, 'src', 'data', 'seed.json')
-const SCAN_PATH = path.join(ROOT, 'src', 'data', 'seedScanned.json')
 
 // .env 직접 로드
 function loadEnv() {
@@ -78,40 +77,39 @@ function toItem(p) {
 
 async function main() {
   const env = loadEnv()
+  Object.assign(process.env, env) // store.js 가 SUPABASE_* 등을 읽도록 주입
   const kkey = env.KAKAO_REST_KEY
   const nid = env.NAVER_CLIENT_ID
   const nsec = env.NAVER_CLIENT_SECRET
   if (!kkey || !nid || !nsec) { console.error('KAKAO_REST_KEY / NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 필요'); process.exit(1) }
+  console.log(usingSupabase() ? '저장소: Supabase (공유·영구)' : '저장소: 로컬 파일')
 
   const args = process.argv.slice(2)
   const areaNames = args.includes('--all') ? Object.keys(AREAS) : (args.length ? args : DEFAULT_AREAS)
 
-  // 기존 seed 로드(누적)
-  let seed = {}
-  if (fs.existsSync(SEED_PATH)) {
-    try { for (const s of JSON.parse(fs.readFileSync(SEED_PATH, 'utf8'))) seed[s.id] = s } catch (_) {}
-  }
-
-  // 스캔 기록(라이브 엔드포인트가 재스캔 안 하도록)
-  let scans = []
-  if (fs.existsSync(SCAN_PATH)) { try { scans = JSON.parse(fs.readFileSync(SCAN_PATH, 'utf8')) } catch (_) {} }
+  // 기존 seed/스캔 로드(누적)
+  const seed = {}
+  for (const s of await seedAll()) seed[s.id] = s
+  const scans = await scannedAll()
+  const allUpserts = []
 
   let totalNew = 0
   for (const name of areaNames) {
     const center = AREAS[name]
     if (!center) { console.warn(`스킵: 모르는 동네 "${name}"`); continue }
-    if (!scans.some((c) => Math.abs(c.lng - center[0]) < 0.02 && Math.abs(c.lat - center[1]) < 0.02)) scans.push({ lng: center[0], lat: center[1] })
+    if (!scans.some((c) => Math.abs(c.lng - center[0]) < 0.02 && Math.abs(c.lat - center[1]) < 0.02)) {
+      scans.push({ lng: center[0], lat: center[1] })
+      await scannedAdd({ lng: center[0], lat: center[1] })
+    }
     process.stdout.write(`\n[${name}] 카카오 수집...`)
     const docs = await kakaoCategory(rectOf(center), kkey)
     process.stdout.write(` ${docs.length}곳 → 네이버 블로그 태깅...`)
     const items = docs.map(toItem)
-    // 네이버 태깅(순차 — 레이트리밋 보호)
     const scanned = []
     for (const it of items) {
       const t = await naverTags(it.name, nid, nsec)
       scanned.push({ it, tags: t.tags, blog: t.blog })
     }
-    // 맛집 = 지역 내 블로그 상위 30%
     const cutoff = matjipCutoff(scanned.map((s) => s.blog))
     let tagged = 0
     for (const s of scanned) {
@@ -120,23 +118,24 @@ async function main() {
       tagged++
       const it = s.it
       const prev = seed[it.id]
-      seed[it.id] = {
+      const row = {
         id: it.id, name: it.name, region: it.region, cat: it.cat,
         lat: it.lat, lng: it.lng, place_url: it.place_url, icon: it.icon,
         tags: [...new Set([...(prev?.tags || []), ...tags])], blog: s.blog,
       }
+      seed[it.id] = row
+      allUpserts.push(row)
     }
     totalNew += tagged
     process.stdout.write(` 태그 ${tagged}곳`)
   }
 
-  const list = Object.values(seed).sort((a, b) => a.id.localeCompare(b.id))
-  fs.writeFileSync(SEED_PATH, JSON.stringify(list, null, 2) + '\n', 'utf8')
-  fs.writeFileSync(SCAN_PATH, JSON.stringify(scans, null, 2) + '\n', 'utf8')
+  await seedUpsert(allUpserts)
+  const list = Object.values(seed)
   // 태그 통계
   const stat = {}
   for (const s of list) for (const t of s.tags) stat[t] = (stat[t] || 0) + 1
-  console.log(`\n\n✅ seed.json 저장: 총 ${list.length}곳 (이번 태깅 ${totalNew}곳)`)
+  console.log(`\n\n✅ 저장 완료: 총 ${list.length}곳 (이번 태깅 ${totalNew}곳)`)
   console.log('   태그별:', Object.entries(stat).map(([k, v]) => `${k} ${v}`).join(' · '))
 }
 
