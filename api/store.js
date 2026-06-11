@@ -35,6 +35,23 @@ export async function seedAll() {
   return fRead(SEED_PATH, [])
 }
 
+// 주어진 id 들의 태그·블로그수만 조회(일반 검색 결과에 태그 붙일 때)
+export async function seedByIds(ids) {
+  if (!ids?.length) return {}
+  if (usingSupabase()) {
+    const inList = ids.map((id) => `"${id}"`).join(',')
+    const r = await fetch(`${sbUrl()}/rest/v1/seed?id=in.(${encodeURIComponent(inList)})&select=id,tags,blog`, { headers: headers() })
+    if (!r.ok) return {}
+    const m = {}
+    for (const x of await r.json()) m[x.id] = { tags: x.tags || [], blog: x.blog || 0 }
+    return m
+  }
+  const set = new Set(ids)
+  const m = {}
+  for (const p of fRead(SEED_PATH, [])) if (set.has(p.id)) m[p.id] = { tags: p.tags || [], blog: p.blog || 0 }
+  return m
+}
+
 export async function seedUpsert(rows) {
   if (!rows?.length) return
   if (usingSupabase()) {

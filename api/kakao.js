@@ -19,6 +19,7 @@ export function catFromKakao(name = '') {
 }
 
 import { cachedEnrich } from './gcache.js'
+import { seedByIds } from './store.js'
 
 // 카카오 가게를 구글에 이름+좌표로 매칭해 평점·사진을 가져온다 (표시용).
 // (구글 키 있을 때만, 좌표가 ~300m 내로 맞을 때만 채택)
@@ -124,6 +125,12 @@ export default async function handler(req, res) {
         source: 'kakao',
       }
     })
+
+    // 이미 분석된(시드/DB에 있는) 가게는 태그·블로그수 붙이기 — 일반 검색에도 태그 표시
+    try {
+      const known = await seedByIds(places.map((p) => p.id))
+      places = places.map((p) => (known[p.id] ? { ...p, tags: known[p.id].tags, blog: known[p.id].blog } : p))
+    } catch (_) {}
 
     // 구글 보강: 보여줄 상위 N개에 평점·리뷰·사진 채우기 (캐시 우선, 14일 지난 것만 재호출)
     const gkey = process.env.GOOGLE_PLACES_API_KEY

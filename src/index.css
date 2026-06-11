@@ -78,6 +78,14 @@ header {
 .chip.sub2 { font-size: 12.5px; padding: 5px 12px; }
 /* 필터 안 키워드/가격 칩 — 가로 스크롤 대신 줄바꿈(여러 줄) */
 .filterbar .chips-wrap { flex-wrap: wrap; }
+/* 지역 주소 검색창 + 자동완성 */
+.region-search { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; font-size: 14px; outline: none; }
+.region-search:focus { border-color: var(--brand, #f6843a); }
+.region-suggests { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 4px; max-height: 230px; overflow-y: auto; }
+.region-suggest { display: flex; align-items: center; gap: 8px; text-align: left; background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; color: #333; cursor: pointer; }
+.region-suggest:hover { background: #fff6ef; border-color: var(--brand, #f6843a); }
+.region-suggest-ic { font-size: 12px; }
+
 /* 태그 필터(맛집/노포/혼밥) 칩 */
 .nopo-chip .nopo-sub { font-size: 11px; opacity: .6; margin-left: 4px; font-weight: 500; }
 .nopo-chip.active .nopo-sub { opacity: .85; }

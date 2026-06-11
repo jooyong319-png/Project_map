@@ -7,7 +7,7 @@
 // ⚠️ 파일 쓰기는 로컬(dev)에서만 — Vercel prod 는 읽기전용이라 매번 라이브로 폴백.
 
 import { enrichWithGoogle, catFromKakao, ICON_BY_CAT } from './kakao.js'
-import { naverTags, matjipCutoff, isMatjip } from './naver.js'
+import { naverTags, matjipCutoff, isMatjip, dongOf } from './naver.js'
 import { cachedEnrich } from './gcache.js'
 import { seedAll, seedUpsert, scannedAll, scannedAdd } from './store.js'
 
@@ -41,15 +41,16 @@ async function liveScan(box, kkey, nid, nsec) {
   for (const p of docs.slice(0, LIVE_MAX)) {
     const c = catFromKakao(p.category_name)
     const name = p.place_name || '이름 없음'
-    const t = await naverTags(name, nid, nsec)
+    const area = dongOf(p.address_name || p.road_address_name)
+    const t = await naverTags(name, area, nid, nsec)
     scanned.push({
       id: 'k_' + p.id, name, region: p.road_address_name || p.address_name || '', cat: c,
       lat: Number(p.y), lng: Number(p.x), icon: ICON_BY_CAT[c], place_url: p.place_url || '',
       tags: t.tags, blog: t.blog,
     })
   }
-  const cutoff = matjipCutoff(scanned.map((s) => s.blog))
-  for (const s of scanned) if (isMatjip(s.blog, cutoff)) s.tags = [...new Set([...s.tags, '맛집'])]
+  const stats = matjipCutoff(scanned.map((s) => s.blog))
+  for (const s of scanned) if (isMatjip(s.blog, stats)) s.tags = [...new Set([...s.tags, '맛집'])]
   return scanned.filter((s) => s.tags.length)
 }
 
@@ -75,7 +76,11 @@ export default async function handler(req, res) {
     const scans = await scannedAll()
     if (!scannedNear(center, scans)) {
       try {
-        const found = await liveScan(box, kkey, nid, nsec)
+        // 사용자의 지도 박스(줌마다 크기 제각각)가 아니라, 중심 기준 '고정 크기(약 2.8km) 동네'를 스캔
+        // → 맛집(지역 상위 30%) 기준이 줌과 무관하게 일정해진다(작게 잡아도 별것 아닌 곳이 맛집 안 됨)
+        const D = 0.014
+        const scanBox = { w: center.lng - D, s: center.lat - D, e: center.lng + D, n: center.lat + D }
+        const found = await liveScan(scanBox, kkey, nid, nsec)
         const byId = new Map(seed.map((p) => [p.id, p]))
         const rows = found.map((f) => {
           const prev = byId.get(f.id)

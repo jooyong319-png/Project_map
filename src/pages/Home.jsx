@@ -7,6 +7,8 @@ import { getRestaurants, getCuration } from '../lib/places.js'
 import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
 import { COUNTRIES } from '../data/countries.js'
 
+const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
+
 export default function Home() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('reviews')
@@ -42,6 +44,7 @@ export default function Home() {
   const [bookmarkOnly, setBookmarkOnly] = useState(false)
   const [navTo, setNavTo] = useState(null) // 나라 필터 검색 시 지도 이동 신호
   const [regionTarget, setRegionTarget] = useState(null) // 선택한 지역 {center,zoom} ('필터 적용' 시 이동+검색)
+  const [pickedLabel, setPickedLabel] = useState('') // 주소검색으로 고른 지역 라벨
 
   // 데이터 로드 — 커밋된 검색(search)이 바뀔 때만. 진입(tick 0) 시엔 검색 안 하고 저장된 곳만 표시.
   // 최소 로딩 시간을 둬서 "검색 중" 표시가 살짝 보이게(천천히 검색되는 느낌).
@@ -177,7 +180,7 @@ export default function Home() {
     if (regionTarget) {
       setQuery('')
       pendingSearchRef.current = { q: keyword } // 지도 도착 후 검색 예약
-      setNavTo({ center: regionTarget.center, zoom: regionTarget.zoom }) // 그 지역으로 이동 → 도착하면 onBoundsChange 가 검색
+      setNavTo({ center: regionTarget.center, zoom: regionTarget.zoom + REGION_FOCUS_BOOST }) // 포커스 더 들어가게
     } else {
       runTextSearch() // 지역 선택 없으면 현재 보는 영역에서 검색
     }
@@ -195,11 +198,17 @@ export default function Home() {
   const onCountry = (name) => {
     const c = COUNTRIES.find((x) => x.name === name)
     if (!c) return
-    setCountry(name); setCity(''); setArea(''); setKeyword('')
+    setCountry(name); setCity(''); setArea(''); setKeyword(''); setPickedLabel('')
     setRegionTarget({ center: c.center, zoom: c.zoom })
   }
-  const onCity = (c) => { setCity(c.name); setArea(''); setRegionTarget({ center: c.center, zoom: c.zoom }) }
-  const onArea = (a) => { setArea(a.name); setRegionTarget({ center: a.center, zoom: a.zoom }) }
+  const onCity = (c) => { setCity(c.name); setArea(''); setPickedLabel(''); setRegionTarget({ center: c.center, zoom: c.zoom }) }
+  const onArea = (a) => { setArea(a.name); setPickedLabel(''); setRegionTarget({ center: a.center, zoom: a.zoom }) }
+  // 주소검색으로 지역 선택 (카카오 좌표). 나라/도시/동네 칩 선택은 해제.
+  const onRegionPick = (s) => {
+    setCountry(''); setCity(''); setArea('')
+    setPickedLabel(s.label)
+    setRegionTarget({ center: [s.lng, s.lat], zoom: s.zoom })
+  }
   // 지역 진입/이탈 시 리스트 초기화(기본=저장 뷰) + 선택 해제
   const onReset = (countryName) => {
     setQuery('')
@@ -210,6 +219,7 @@ export default function Home() {
     setCountry(countryName || '') // 지구본 복귀 시 선택 해제
     setCity('')
     setArea('')
+    setPickedLabel('')
     setRegionTarget(null)
     setSort('reviews')
     setLimit(50)
@@ -276,6 +286,7 @@ export default function Home() {
           keyword={keyword} onKeyword={setKeyword}
           price={price} onPrice={setPrice}
           tags={tags} onToggleTag={toggleTag}
+          onRegionPick={onRegionPick} pickedLabel={pickedLabel}
         />
         </div>
         <div className="filter-apply-wrap">

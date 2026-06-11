@@ -10,7 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { catFromKakao, ICON_BY_CAT } from '../api/kakao.js'
-import { naverTags, matjipCutoff, isMatjip } from '../api/naver.js'
+import { naverTags, matjipCutoff, isMatjip, dongOf } from '../api/naver.js'
 import { seedAll, seedUpsert, scannedAll, scannedAdd, usingSupabase } from '../api/store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -66,6 +66,7 @@ function toItem(p) {
     id: 'k_' + p.id,
     name: p.place_name || '이름 없음',
     region: p.road_address_name || p.address_name || '',
+    dong: dongOf(p.address_name || p.road_address_name),
     cat: c,
     lng: Number(p.x),
     lat: Number(p.y),
@@ -107,21 +108,20 @@ async function main() {
     const items = docs.map(toItem)
     const scanned = []
     for (const it of items) {
-      const t = await naverTags(it.name, nid, nsec)
+      const t = await naverTags(it.name, it.dong, nid, nsec)
       scanned.push({ it, tags: t.tags, blog: t.blog })
     }
-    const cutoff = matjipCutoff(scanned.map((s) => s.blog))
+    const stats = matjipCutoff(scanned.map((s) => s.blog))
     let tagged = 0
     for (const s of scanned) {
-      const tags = isMatjip(s.blog, cutoff) ? [...new Set([...s.tags, '맛집'])] : s.tags
+      const tags = isMatjip(s.blog, stats) ? [...new Set([...s.tags, '맛집'])] : s.tags
       if (!tags.length) continue
       tagged++
       const it = s.it
-      const prev = seed[it.id]
       const row = {
         id: it.id, name: it.name, region: it.region, cat: it.cat,
         lat: it.lat, lng: it.lng, place_url: it.place_url, icon: it.icon,
-        tags: [...new Set([...(prev?.tags || []), ...tags])], blog: s.blog,
+        tags: [...new Set(tags)], blog: s.blog, // 방식 변경 반영 위해 누적 아닌 '교체'
       }
       seed[it.id] = row
       allUpserts.push(row)
