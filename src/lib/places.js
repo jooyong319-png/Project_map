@@ -17,14 +17,15 @@ export async function getRestaurants(query = '', opts = {}) {
     const res = await fetch(`/api/places?${params.toString()}`)
     if (res.ok) {
       const data = await res.json()
-      if (!data.fallback && Array.isArray(data.places) && data.places.length > 0) {
-        return { items: data.places, source: 'google' }
+      // 키가 있으면(=fallback 아님) 실제 결과를 그대로 반환. 0개면 빈 목록(목 데이터 안 씀).
+      if (!data.fallback) {
+        return { items: Array.isArray(data.places) ? data.places : [], source: 'google' }
       }
     }
   } catch (_) {
     // 네트워크 오류 → 폴백
   }
-  // 폴백: 목 데이터에 카테고리/검색어 로컬 필터
+  // 여기 도달 = 키 없음(fallback) 또는 네트워크 오류 → 목 데이터로 데모
   let items = MOCK
   if (cat) items = items.filter((d) => d.cat === cat)
   if (base) items = items.filter((d) => (d.name + d.region + d.cat).toLowerCase().includes(base.toLowerCase()))

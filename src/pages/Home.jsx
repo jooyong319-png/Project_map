@@ -135,7 +135,7 @@ export default function Home() {
           aria-label={listOpen ? '목록 접기' : '목록 펼치기'}
           title={listOpen ? '목록 접기' : '목록 펼치기'}
         >
-          {listOpen ? '»' : '«'}
+          {listOpen ? '«' : '»'}
         </button>
         <div className="results">
           <RestaurantList
@@ -145,6 +145,7 @@ export default function Home() {
             loading={loading}
             onOpen={onPick}
             onBookmark={onBookmark}
+            emptyText={showingSaved ? '저장한 맛집이 없어요 🔖' : '구글에 등록된 식당이 없어요 🥲'}
           />
         </div>
         <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} loading={loading} />
