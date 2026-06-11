@@ -2,25 +2,22 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import RestaurantList from '../components/RestaurantList.jsx'
 import DetailModal from '../components/DetailModal.jsx'
-import { getRestaurants } from '../lib/places.js'
-import { getBookmarks, toggleBookmark } from '../lib/supabase.js'
+import { getSavedItems, toggleBookmark } from '../lib/supabase.js'
 
 export default function Saved() {
-  const [all, setAll] = useState([])
-  const [bookmarks, setBookmarks] = useState([])
+  const [saved, setSaved] = useState([])
   const [openItem, setOpenItem] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([getRestaurants(''), getBookmarks()]).then(([{ items }, bm]) => {
-      setAll(items)
-      setBookmarks(bm)
-      setLoading(false)
-    })
+    getSavedItems().then((items) => { setSaved(items); setLoading(false) })
   }, [])
 
-  const saved = all.filter((d) => bookmarks.includes(d.id))
-  const onBookmark = async (id) => setBookmarks(await toggleBookmark(id))
+  const bookmarks = saved.map((d) => d.id)
+  const onBookmark = async (data) => {
+    await toggleBookmark(data)
+    setSaved(await getSavedItems())
+  }
 
   return (
     <div className="saved-page">
@@ -45,7 +42,7 @@ export default function Saved() {
           />
         )}
       </div>
-      <DetailModal data={openItem} onClose={() => setOpenItem(null)} />
+      <DetailModal data={openItem} onClose={() => setOpenItem(null)} onBookmark={onBookmark} bookmarked={openItem ? bookmarks.includes(openItem.id) : false} />
     </div>
   )
 }

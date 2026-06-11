@@ -8,10 +8,10 @@ const land = feature(worldData, worldData.objects.countries)
 const graticule = geoGraticule10()
 const IDLE_MS = 3500 // 이 시간 이상 가만두면 자동 회전 재개
 
-export default function Globe({ items, selected, onSelect, onCountryClick, onZoomThrough, initialCenter, initialScale }) {
+export default function Globe({ items, selected, onSelect, onCountryClick, onZoomThrough, flyTo, onFlyDone, initialCenter, initialScale }) {
   const canvasRef = useRef(null)
   const propsRef = useRef({})
-  propsRef.current = { items, selected, onSelect, onCountryClick, onZoomThrough }
+  propsRef.current = { items, selected, onSelect, onCountryClick, onZoomThrough, onFlyDone }
   const stateRef = useRef(null)
 
   useEffect(() => {
@@ -64,33 +64,33 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
 
       // 대기광 (구체 바깥 글로우)
       const glow = ctx.createRadialGradient(cx, cy, R * 0.92, cx, cy, R * 1.2)
-      glow.addColorStop(0, 'rgba(120,180,255,0.40)')
-      glow.addColorStop(1, 'rgba(120,180,255,0)')
+      glow.addColorStop(0, 'rgba(150,200,250,0.45)')
+      glow.addColorStop(1, 'rgba(150,200,250,0)')
       ctx.fillStyle = glow
       ctx.beginPath(); ctx.arc(cx, cy, R * 1.2, 0, 2 * Math.PI); ctx.fill()
 
-      // 바다(구체) — 방향성 그라데이션으로 입체감
+      // 바다(구체) — 밝은 지도 느낌의 연한 하늘색 + 입체감
       const ocean = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R)
-      ocean.addColorStop(0, '#1f66b0')
-      ocean.addColorStop(0.6, '#0f3f78')
-      ocean.addColorStop(1, '#0a2a55')
+      ocean.addColorStop(0, '#dcefff')
+      ocean.addColorStop(0.55, '#aedcf3')
+      ocean.addColorStop(1, '#8ec6e6')
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI)
       ctx.fillStyle = ocean; ctx.fill()
 
       // 위경도 그리드
       ctx.beginPath(); path(graticule)
-      ctx.strokeStyle = 'rgba(150,190,235,0.22)'; ctx.lineWidth = 0.5; ctx.stroke()
+      ctx.strokeStyle = 'rgba(90,140,180,0.18)'; ctx.lineWidth = 0.5; ctx.stroke()
 
-      // 육지
+      // 육지 — 밝은 지도 느낌의 베이지
       ctx.beginPath(); path(land)
-      ctx.fillStyle = '#3f93de'; ctx.fill()
-      ctx.strokeStyle = '#8fc3f0'; ctx.lineWidth = 0.4; ctx.stroke()
+      ctx.fillStyle = '#f4efe2'; ctx.fill()
+      ctx.strokeStyle = '#d8ccb2'; ctx.lineWidth = 0.5; ctx.stroke()
 
-      // 입체 음영 (좌상단 하이라이트, 우하단 그림자)
+      // 입체 음영 (좌상단 하이라이트, 우하단 살짝 그림자 — 밝게 유지)
       const shade = ctx.createRadialGradient(cx - R * 0.4, cy - R * 0.45, R * 0.2, cx, cy, R)
-      shade.addColorStop(0, 'rgba(255,255,255,0.18)')
-      shade.addColorStop(0.5, 'rgba(255,255,255,0)')
-      shade.addColorStop(1, 'rgba(0,0,12,0.38)')
+      shade.addColorStop(0, 'rgba(255,255,255,0.30)')
+      shade.addColorStop(0.55, 'rgba(255,255,255,0)')
+      shade.addColorStop(1, 'rgba(40,70,100,0.22)')
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI)
       ctx.fillStyle = shade; ctx.fill()
 
@@ -102,20 +102,20 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       // 지역 핀 (맥동 링 + 라벨)
       const pulse = (Math.sin(st.now / 450) + 1) / 2 // 0..1
       ctx.textAlign = 'center'
-      ctx.font = '700 12px system-ui, sans-serif'
+      ctx.font = '700 13px system-ui, sans-serif'
       ctx.lineJoin = 'round'
       for (let i = 0; i < COUNTRIES.length; i++) {
         const c = COUNTRIES[i]
         if (geoDistance(c.center, center) >= Math.PI / 2) continue
         const p = projection(c.center); if (!p) continue
         const x = p[0], y = p[1]
-        ctx.beginPath(); ctx.arc(x, y, 7 + pulse * 9, 0, 2 * Math.PI)
+        ctx.beginPath(); ctx.arc(x, y, 11 + pulse * 13, 0, 2 * Math.PI)
         ctx.fillStyle = `rgba(240,121,46,${0.28 * (1 - pulse)})`; ctx.fill()
-        ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI)
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, 2 * Math.PI)
         ctx.fillStyle = '#f0792e'; ctx.fill()
-        ctx.lineWidth = 1.6; ctx.strokeStyle = '#fff'; ctx.stroke()
-        ctx.lineWidth = 3; ctx.strokeStyle = '#0a1428'; ctx.strokeText(c.name, x, y - 12)
-        ctx.fillStyle = '#fff'; ctx.fillText(c.name, x, y - 12)
+        ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke()
+        ctx.lineWidth = 3.5; ctx.strokeStyle = '#0a1428'; ctx.strokeText(c.name, x, y - 18)
+        ctx.fillStyle = '#fff'; ctx.fillText(c.name, x, y - 18)
       }
     }
     st.draw = draw
@@ -125,12 +125,12 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       const mx = clientX - rect.left, my = clientY - rect.top
       const rot = projection.rotate()
       const center = [-rot[0], -rot[1]]
-      // 1) 지역 핀 우선 (히트 반경 넉넉히)
+      // 1) 지역 핀 우선 — 핀 + 라벨까지 넉넉한 히트 영역(중심을 핀과 라벨 사이로)
       for (let i = 0; i < COUNTRIES.length; i++) {
         const c = COUNTRIES[i]
         if (geoDistance(c.center, center) >= Math.PI / 2) continue
         const p = projection(c.center); if (!p) continue
-        if ((p[0] - mx) ** 2 + (p[1] - my) ** 2 <= 13 * 13) {
+        if ((p[0] - mx) ** 2 + (p[1] - 8 - my) ** 2 <= 28 * 28) {
           propsRef.current.onCountryClick && propsRef.current.onCountryClick(c)
           return
         }
@@ -155,7 +155,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       st.lastInteract = st.now
       st.vx = st.vy = 0
       if (st.pointers.size === 1) {
-        st.dragging = true; st.moved = false; st.lastPt = [e.clientX, e.clientY]
+        st.dragging = true; st.moved = false; st.lastPt = [e.clientX, e.clientY]; st.downPt = [e.clientX, e.clientY]
       } else if (st.pointers.size === 2) {
         st.dragging = false
         const v = [...st.pointers.values()]
@@ -187,15 +187,23 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
     }
     function onUp(e) {
       if (!st.pointers.has(e.pointerId)) return
-      const wasTap = st.dragging && st.pointers.size === 1 && !st.moved
       st.pointers.delete(e.pointerId)
       try { canvas.releasePointerCapture(e.pointerId) } catch (_) {}
       if (st.pointers.size < 2) st.pinchDist = 0
       if (st.pointers.size === 0) {
         st.dragging = false
         st.lastInteract = st.now
-        if (wasTap) { st.vx = st.vy = 0; handleTap(e.clientX, e.clientY) }
+        if (!st.moved) st.vx = st.vy = 0 // 탭이면 관성 제거
       }
+    }
+    // 탭은 네이티브 click 으로 처리. 누른 곳과 뗀 곳 거리가 작으면(손떨림 허용) 탭으로 간주.
+    function onClick(e) {
+      const dp = st.downPt
+      if (dp) {
+        const dx = e.clientX - dp[0], dy = e.clientY - dp[1]
+        if (dx * dx + dy * dy > 12 * 12) return
+      }
+      handleTap(e.clientX, e.clientY)
     }
     function onWheel(e) {
       e.preventDefault()
@@ -204,6 +212,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
 
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointermove', onMove)
+    canvas.addEventListener('click', onClick)
     canvas.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onUp)
@@ -212,9 +221,28 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
     ro.observe(canvas)
     resize()
 
+    // 특정 좌표로 회전+확대해 날아가기 (클릭 진입 연출)
+    st.startFly = (lng, lat) => {
+      const r = projection.rotate()
+      let dLon = ((-lng - r[0] + 540) % 360) - 180 // 최단 경로
+      st.fly = { r0: r[0], r1: r[1], toLon: r[0] + dLon, toLat: -lat, s0: projection.scale(), s1: st.max, t0: performance.now(), done: false }
+    }
+
     function frame(now) {
       if (!st.alive) return
       st.now = now
+      // 진입 연출 중이면 회전+확대만 보간하고 나머진 스킵
+      if (st.fly && !st.fly.done) {
+        const f = st.fly
+        const p = Math.min(1, (now - f.t0) / 850)
+        const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2 // easeInOutCubic
+        projection.rotate([f.r0 + (f.toLon - f.r0) * e, f.r1 + (f.toLat - f.r1) * e])
+        projection.scale(f.s0 + (f.s1 - f.s0) * e)
+        draw()
+        if (p >= 1) { f.done = true; propsRef.current.onFlyDone && propsRef.current.onFlyDone() }
+        st.raf = requestAnimationFrame(frame)
+        return
+      }
       // 줌 이징
       const cur = projection.scale()
       if (Math.abs(st.targetScale - cur) > 0.05) projection.scale(cur + (st.targetScale - cur) * 0.18)
@@ -243,11 +271,18 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       ro.disconnect()
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
+      canvas.removeEventListener('click', onClick)
       canvas.removeEventListener('wheel', onWheel)
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
     }
   }, [])
+
+  // flyTo 가 지정되면 그 좌표로 날아가는 연출 시작
+  useEffect(() => {
+    const st = stateRef.current
+    if (st && st.startFly && flyTo) st.startFly(flyTo.lng, flyTo.lat)
+  }, [flyTo])
 
   const zoom = (factor) => { stateRef.current && stateRef.current.zoomBy(factor) }
 
