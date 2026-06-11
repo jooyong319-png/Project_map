@@ -200,6 +200,24 @@ header {
 .area-search .spin { display: inline-block; width: 12px; height: 12px; margin-right: 7px; vertical-align: -1px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* 내 위치 버튼 (지도 우측, 줌 컨트롤 아래) */
+.locate-btn {
+  position: absolute; top: 92px; right: 16px; z-index: 12;
+  width: 40px; height: 40px; border-radius: 12px; border: none;
+  background: #fff; box-shadow: var(--shadow-md);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .12s, box-shadow .12s;
+}
+.locate-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.locate-btn:disabled { opacity: .7; }
+.locate-btn svg { width: 22px; height: 22px; fill: #2b6fd6; }
+.locate-btn .spin.dark { display: inline-block; width: 16px; height: 16px; border: 2px solid #cfd6e4; border-top-color: #2b6fd6; border-radius: 50%; animation: spin .7s linear infinite; }
+
+/* 현재 위치 마커(파란 점 + 펄스) */
+.myloc { width: 16px; height: 16px; border-radius: 50%; background: #2b6fd6; border: 2.5px solid #fff; box-shadow: 0 0 0 1px rgba(43, 111, 214, .5), 0 1px 4px rgba(0, 0, 0, .35); position: relative; }
+.myloc-pulse { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; border-radius: 50%; background: rgba(43, 111, 214, .35); transform: translate(-50%, -50%); animation: locpulse 1.8s ease-out infinite; }
+@keyframes locpulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: .6; } 100% { transform: translate(-50%, -50%) scale(3.4); opacity: 0; } }
+
 /* "이 지역 TOP 10" 버튼 */
 .area-search {
   position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 500;
