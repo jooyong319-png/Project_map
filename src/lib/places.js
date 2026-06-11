@@ -6,12 +6,11 @@ import { MOCK } from '../data/mockRestaurants'
 export async function getRestaurants(query = '', opts = {}) {
   const base = query.trim()
   const cat = opts.category && opts.category !== '전체' ? opts.category : ''
-  // 카테고리는 검색어에 녹여서 그 종류로 검색되게 한다
-  let q = base
-  if (cat) q = base ? `${cat} ${base}` : `${cat} 맛집`
-  if (!q) q = '전국 맛집'
+  // 키워드/카테고리를 따로 보내고, 실제 검색어 변환은 서버에서(전 세계 통하게)
   try {
-    const params = new URLSearchParams({ q })
+    const params = new URLSearchParams()
+    if (base) params.set('q', base)
+    if (cat) params.set('cat', cat)
     if (opts.bbox) params.set('bbox', opts.bbox.join(','))
     if (opts.openNow) params.set('open', '1') // 영업 중만 (구글 API openNow)
     const res = await fetch(`/api/places?${params.toString()}`)

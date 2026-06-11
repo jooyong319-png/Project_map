@@ -49,6 +49,8 @@ header {
 }
 .search:focus-within { border-color: #f3b48f; box-shadow: 0 0 0 4px rgba(240, 121, 46, .12); }
 .search input { border: none; background: transparent; outline: none; flex: 1; font-size: 15px; padding: 12px 0; color: var(--ink); }
+.search-go { border: none; background: var(--grad); color: #fff; font-weight: 700; font-size: 13.5px; padding: 8px 16px; border-radius: 999px; margin-left: 4px; box-shadow: 0 2px 8px rgba(232, 84, 58, .3); transition: transform .12s; }
+.search-go:hover { transform: translateY(-1px); }
 .sortsel {
   border: 1px solid var(--line); border-radius: 999px; padding: 11px 16px; font-size: 14px; background: var(--surface);
   box-shadow: var(--shadow-sm); color: #444; cursor: pointer;
@@ -174,6 +176,8 @@ header {
 .area-search:hover { box-shadow: var(--shadow-lg); transform: translateX(-50%) translateY(-1px); }
 .area-search:active { transform: translateX(-50%); }
 .area-search:disabled { opacity: .7; cursor: default; }
+/* 너무 멀 때: CTA 대신 확대 안내 (클릭/호버 반응 없음) */
+.area-search.hint { background: rgba(255, 255, 255, .94); color: #6a6d73; font-weight: 600; box-shadow: var(--shadow-md); cursor: default; transform: translateX(-50%); }
 .globe-hint {
   position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 2;
   background: rgba(255, 255, 255, .92); color: #333; font-size: 13px; font-weight: 500;
@@ -188,9 +192,11 @@ header {
 .detail-panel {
   position: absolute; top: 12px; left: 384px; width: 330px; max-width: calc(100% - 396px); max-height: calc(100% - 24px); z-index: 15;
   background: #fff; border-radius: 16px; box-shadow: var(--shadow-lg); overflow-y: auto;
-  animation: detailIn .22s ease both;
+  animation: detailIn .22s ease both; transition: left .26s ease;
 }
 @keyframes detailIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+/* 리스트를 접으면 상세 패널이 리스트 자리로 이동 */
+.wrap.collapsed .detail-panel { left: 12px; }
 .detail-close { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 999px; background: #f1f1f3; border: none; color: #555; font-size: 20px; line-height: 1; z-index: 2; display: flex; align-items: center; justify-content: center; transition: background .12s; }
 .detail-close:hover { background: #e3e3e7; }
 .detail-head { padding: 18px 18px 12px; }

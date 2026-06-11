@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import VectorBasemap from './VectorBasemap.jsx'
+
+const AREA_MIN_ZOOM = 12 // 이보다 멀면(축소) 검색 비활성 — 동네 단위로 확대해야 검색
 
 // 기본: 노란 원 / 저장된 곳: 별 모양 (SVG). i = 등장 순서(스태거 애니메이션용)
 function makeIcon(d, i) {
@@ -22,7 +24,7 @@ function makeIcon(d, i) {
 
 const KR_CENTER = [36.2, 127.8] // 대한민국 중앙 부근
 const KR_ZOOM = 7
-const MAP_MIN_ZOOM = 5 // 이보다 더 축소하면 지구본으로 복귀
+const MAP_MIN_ZOOM = 6.5 // 진입 줌(7)에서 한 단계만 축소해도 지구본으로 복귀
 
 // items 가 바뀌면 마커들이 보이도록 지도 영역을 맞춘다.
 // (지구본에서 전환되어 들어온 경우 initialCenter 가 있으므로 자동 맞춤은 생략)
@@ -61,11 +63,13 @@ function FocusOnSelect({ items, selected }) {
   return null
 }
 
-// 너무 축소하면 지구본으로 복귀
-function ZoomWatcher({ onZoomOut }) {
+// 줌 감시: 현재 줌 보고 + 너무 축소하면 지구본으로 복귀
+function ZoomWatcher({ onZoomOut, onZoom }) {
   const map = useMapEvents({
     zoomend() {
-      if (map.getZoom() <= MAP_MIN_ZOOM) {
+      const z = map.getZoom()
+      onZoom && onZoom(z)
+      if (z <= MAP_MIN_ZOOM) {
         const c = map.getCenter()
         onZoomOut && onZoomOut([c.lng, c.lat]) // [lng, lat]
       }
@@ -74,10 +78,12 @@ function ZoomWatcher({ onZoomOut }) {
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, searching, initialCenter, initialZoom }) {
+export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, searching, limit = 10, initialCenter, initialZoom }) {
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
   const points = valid.map((d) => [d.lat, d.lng])
   const mapRef = useRef(null)
+  const [zoom, setZoom] = useState(initialZoom || KR_ZOOM)
+  const canSearch = zoom >= AREA_MIN_ZOOM
   // 아이콘은 items 가 바뀔 때만 새로 만든다(선택 변화로 깜빡이지 않게). 새 결과마다 스태거 팝 애니메이션.
   const icons = useMemo(() => {
     const m = new Map()
@@ -100,7 +106,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       ref={mapRef}
       center={initialCenter || KR_CENTER}
       zoom={initialZoom || KR_ZOOM}
-      minZoom={3}
+      minZoom={6.5}
       zoomSnap={0.5}
       zoomDelta={0.5}
       scrollWheelZoom
@@ -109,7 +115,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       <VectorBasemap />
       <FitBounds points={points} skip={!!initialCenter} />
       <FocusOnSelect items={valid} selected={selected} />
-      <ZoomWatcher onZoomOut={onZoomOut} />
+      <ZoomWatcher onZoomOut={onZoomOut} onZoom={setZoom} />
       {selItem && (
         <CircleMarker
           center={[selItem.lat, selItem.lng]}
@@ -133,9 +139,15 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       ))}
     </MapContainer>
     {onSearchArea && (
-      <button className="area-search" onClick={searchHere} disabled={searching}>
-        {searching ? <><span className="spin" />검색 중…</> : '📍 이 지역에서 TOP 10 보기'}
-      </button>
+      canSearch ? (
+        <button className="area-search" onClick={searchHere} disabled={searching}>
+          {searching ? <><span className="spin" />검색 중…</> : `📍 이 지역에서 TOP ${limit} 보기`}
+        </button>
+      ) : (
+        <div className="area-search hint">
+          🔍 더 확대하면 이 지역 TOP {limit}을 볼 수 있어요
+        </div>
+      )
     )}
    </>
   )

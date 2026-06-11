@@ -11,17 +11,19 @@ if (typeof window !== 'undefined') window.maplibregl = maplibregl
 // 무료·키 불필요 벡터 타일 (OpenFreeMap). bright = 밝고 컬러풀, 정보 풍부.
 const STYLE = 'https://tiles.openfreemap.org/styles/bright'
 
-// 모든 심볼 라벨을 한국어로 강제(name:ko → 없으면 name).
-// 바다/대양 이름(동해 등) 라벨은 숨긴다.
+// 라벨 한국어화 + 불필요 레이어 숨김
+//  - 바다 이름(water_name), 도로명·고속도로 표지(transportation_name) 라벨
+//  - 행정 경계선(boundary) + 페리 항로(ferry) → 바다 위 선 제거
+const HIDE_SOURCE_LAYERS = ['water_name', 'transportation_name', 'boundary']
+const HIDE_IDS = ['ferry']
 function localizeKorean(glMap) {
   const layers = (glMap.getStyle()?.layers) || []
   for (const ly of layers) {
-    if (ly.type !== 'symbol') continue
-    if ((ly['source-layer'] || '') === 'water_name') {
+    if (HIDE_SOURCE_LAYERS.includes(ly['source-layer'] || '') || HIDE_IDS.includes(ly.id)) {
       try { glMap.setLayoutProperty(ly.id, 'visibility', 'none') } catch (_) {}
       continue
     }
-    if (ly.layout && ly.layout['text-field'] !== undefined) {
+    if (ly.type === 'symbol' && ly.layout && ly.layout['text-field'] !== undefined) {
       try {
         glMap.setLayoutProperty(ly.id, 'text-field', ['coalesce', ['get', 'name:ko'], ['get', 'name']])
       } catch (_) {}

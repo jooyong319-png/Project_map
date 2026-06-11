@@ -5,7 +5,7 @@ import { DEFAULT_REGION } from '../data/countries.js'
 
 // 지구본에서 지역 핀을 클릭하거나 확대하면 그 지역 지도가 열리고(+ 맛집 검색),
 // 지도를 충분히 축소하면 다시 지구본으로 돌아온다.
-export default function GeoPanel({ items, selected, onSelect, onAreaSearch, loading }) {
+export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onReset, loading, limit }) {
   const [view, setView] = useState('globe') // 'globe' | 'map'
   const [globeStart, setGlobeStart] = useState(null) // { center:[lng,lat], scale }
   const [mapStart, setMapStart] = useState(null) // { center:[lat,lng], zoom }
@@ -28,6 +28,7 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, load
 
   // 지역 지도 열기 (검색은 하지 않음 — "이 지역 TOP 10" 버튼으로만 검색)
   const openRegion = (c) => {
+    onReset && onReset() // 진입 시 리스트 초기화
     setMapStart({ center: [c.center[1], c.center[0]], zoom: c.zoom })
     setSeq((s) => s + 1)
     setView('map')
@@ -35,11 +36,12 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, load
 
   // 핀 클릭 → 지구본이 그 지역으로 날아간 뒤 지도 진입
   const handleCountryClick = (c) => enterWithFly(c.center, () => openRegion(c))
-  // 확대로 진입할 땐 이미 그 지점을 보고 있으니 바로 전환
-  const handleZoomThrough = () => openRegion(DEFAULT_REGION)
+  // 확대로 진입 → 보고 있던 중심에서 가장 가까운 나라(없으면 기본)로
+  const handleZoomThrough = (c) => openRegion(c || DEFAULT_REGION)
 
   // 지도 최소 축소 → 그 좌표로 지구본 복귀
   const handleMapZoomOut = (centerLngLat) => {
+    onReset && onReset() // 이탈 시 리스트 초기화
     setGlobeStart({ center: centerLngLat, scale: 480 })
     setSeq((s) => s + 1)
     setView('globe')
@@ -86,6 +88,7 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, load
             onZoomOut={handleMapZoomOut}
             onSearchArea={onAreaSearch}
             searching={loading}
+            limit={limit}
             initialCenter={mapStart?.center}
             initialZoom={mapStart?.zoom}
           />

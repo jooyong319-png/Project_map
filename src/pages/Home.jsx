@@ -9,8 +9,9 @@ import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
 export default function Home() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('reviews')
+  const [limit, setLimit] = useState(10) // 보여줄 개수 10/30/50
   const [items, setItems] = useState([])
-  const [search, setSearch] = useState({ q: '', bbox: null, cat: '전체', open: false, tick: 0 }) // 커밋된 검색 조건
+  const [search, setSearch] = useState({ q: '', bbox: null, cat: '전체', open: false, sort: 'reviews', lim: 10, tick: 0 }) // 커밋된 검색 조건
   const [source, setSource] = useState('mock')
   const [loading, setLoading] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
@@ -54,10 +55,10 @@ export default function Home() {
   const showingSaved = bookmarkOnly || search.tick === 0
   const visible = useMemo(() => {
     let r = showingSaved ? savedItems : items
-    if (sort === 'rating') r = [...r].sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)
+    if (search.sort === 'rating') r = [...r].sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)
     else r = [...r].sort((a, b) => b.reviews - a.reviews) // 기본: 리뷰 많은순
-    return r.slice(0, 10) // TOP 10
-  }, [items, savedItems, showingSaved, sort])
+    return r.slice(0, search.lim)
+  }, [items, savedItems, showingSaved, search])
 
   // 지도 마커 = TOP10 + 저장한 맛집(검색에 없어도 항상 표시). 저장된 건 saved 표시.
   const mapItems = useMemo(() => {
@@ -71,9 +72,10 @@ export default function Home() {
   // 상황에 맞춰 바뀌는 리스트 제목
   const title = useMemo(() => {
     if (showingSaved) return { prefix: '⭐ 저장한 맛집', suffix: '' }
+    if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' } // 키워드 검색
     const parts = [search.cat !== '전체' ? search.cat : '인기 맛집']
     if (search.open) parts.push('영업중')
-    return { prefix: parts.join(' · '), suffix: 'TOP 10' }
+    return { prefix: parts.join(' · '), suffix: `TOP ${search.lim}` }
   }, [showingSaved, search])
 
   const onBookmark = async (data) => {
@@ -93,27 +95,47 @@ export default function Home() {
   // 검색 커밋 (현재 검색어/필터 + bbox 로). 이걸 호출할 때만 실제 검색이 일어난다.
   const commitSearch = (bbox = null, qOverride) => {
     triggerPeek()
-    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, cat: category, open: openNowOnly, tick: s.tick + 1 }))
+    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, cat: category, open: openNowOnly, sort, lim: limit, tick: s.tick + 1 }))
   }
 
-  // 지도 "이 지역 TOP 10" → 현재 보고 있는 영역 + 현재 검색어/필터로 검색
-  const onAreaSearch = (bbox) => commitSearch(bbox)
+  // 지도 "이 지역 TOP 10" → 현재 영역의 맛집(입력한 텍스트는 비우고 검색)
+  const onAreaSearch = (bbox) => { setQuery(''); commitSearch(bbox, '') }
+  // 검색창의 검색 버튼/Enter → 전국(영역 제한 없이) 키워드 검색
+  const runTextSearch = () => commitSearch(null)
+  // 지역 진입/이탈 시 리스트 초기화(기본=저장 뷰) + 선택 해제
+  const onReset = () => {
+    setQuery('')
+    setCategory('전체')
+    setOpenNowOnly(false)
+    setBookmarkOnly(false)
+    setSort('reviews')
+    setLimit(10)
+    setSearch({ q: '', bbox: null, cat: '전체', open: false, sort: 'reviews', lim: 10, tick: 0 })
+    setSelectedId(null)
+    setOpenItem(null)
+  }
 
   return (
     <>
       <div className="filters">
-        <div className="search">
+        <form className="search" onSubmit={(e) => { e.preventDefault(); runTextSearch() }}>
           <span>🔍</span>
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="맛집·음식 입력 후, 지도에서 '이 지역 TOP 10'"
+            placeholder="맛집·지역·음식 검색 (전국)"
           />
-        </div>
+          <button type="submit" className="search-go">검색</button>
+        </form>
         <select className="sortsel" value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="reviews">리뷰 많은순</option>
           <option value="rating">평점 높은순</option>
+        </select>
+        <select className="sortsel" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+          <option value={10}>10개</option>
+          <option value={30}>30개</option>
+          <option value={50}>50개</option>
         </select>
       </div>
 
@@ -148,7 +170,7 @@ export default function Home() {
             emptyText={showingSaved ? '저장한 맛집이 없어요 🔖' : '구글에 등록된 식당이 없어요 🥲'}
           />
         </div>
-        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} loading={loading} />
+        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onReset={onReset} loading={loading} limit={limit} />
         <DetailModal data={openItem} onClose={() => setOpenItem(null)} onBookmark={onBookmark} bookmarked={openItem ? bookmarks.includes(openItem.id) : false} />
       </div>
     </>

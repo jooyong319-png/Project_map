@@ -31,7 +31,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       vx: 0, vy: 0,            // 드래그 관성 속도(도/프레임)
       dragging: false, moved: false, lastPt: null,
       pointers: new Map(), pinchDist: 0,
-      homeLon: home[0], homeLat: home[1],
+      homeLon: home[0], homeLat: home[1], hoverIdx: -1,
       now: 0, lastInteract: initialCenter ? performance.now() : 0,
       transitioned: false, raf: 0, alive: true,
     }
@@ -48,7 +48,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       projection.translate([W / 2, H / 2])
       const fit = Math.min(W, H) * 0.46
-      st.fit = fit; st.min = fit * 0.78; st.max = fit * 3.4
+      st.fit = fit; st.min = fit * 0.78; st.max = fit * 6
       if (!st.targetScale) {
         const s0 = initialScale ? Math.min(Math.max(initialScale, st.min), st.max) : fit
         st.targetScale = s0
@@ -111,16 +111,26 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
         if (geoDistance(c.center, center) >= Math.PI / 2) continue
         const p = projection(c.center); if (!p) continue
         const x = p[0], y = p[1]
+        const hovered = i === st.hoverIdx
+        // 호버 시 클릭될 곳임을 강조 (흰 글로우 링)
+        if (hovered) {
+          ctx.beginPath(); ctx.arc(x, y, 16, 0, 2 * Math.PI)
+          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill()
+        }
         ctx.beginPath(); ctx.arc(x, y, 11 + pulse * 13, 0, 2 * Math.PI)
         ctx.fillStyle = `rgba(240,121,46,${0.28 * (1 - pulse)})`; ctx.fill()
-        ctx.beginPath(); ctx.arc(x, y, 9, 0, 2 * Math.PI)
+        ctx.beginPath(); ctx.arc(x, y, hovered ? 11 : 9, 0, 2 * Math.PI)
         ctx.fillStyle = '#f0792e'; ctx.fill()
-        ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke()
+        ctx.lineWidth = hovered ? 3 : 2; ctx.strokeStyle = '#fff'; ctx.stroke()
+        ctx.font = hovered ? '800 14px system-ui, sans-serif' : '700 13px system-ui, sans-serif'
         ctx.lineWidth = 3.5; ctx.strokeStyle = '#0a1428'; ctx.strokeText(c.name, x, y - 18)
         ctx.fillStyle = '#fff'; ctx.fillText(c.name, x, y - 18)
       }
     }
     st.draw = draw
+
+    // 클릭/호버 인식 반경: 지구본 배율에 비례(축소될수록 작게)
+    function hitR() { return Math.max(12, Math.min(45, 24 * projection.scale() / st.fit)) }
 
     function handleTap(clientX, clientY) {
       const rect = canvas.getBoundingClientRect()
@@ -131,7 +141,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       if ((mx - cx) ** 2 + (my - cy) ** 2 > R * R) return
       const rot = projection.rotate()
       const center = [-rot[0], -rot[1]]
-      // 앞면에 보이는 핀 중 클릭 지점에서 가장 가까운 것으로 진입(핀이 하나면 무조건 그 핀)
+      // 앞면 핀 중 클릭 지점에서 가장 가까운 것. 단 핀 근처(70px)를 눌렀을 때만 진입.
       let best = null, bestD = Infinity
       for (let i = 0; i < COUNTRIES.length; i++) {
         const c = COUNTRIES[i]
@@ -140,16 +150,24 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
         const d = (p[0] - mx) ** 2 + (p[1] - 8 - my) ** 2
         if (d < bestD) { bestD = d; best = c }
       }
-      if (best) propsRef.current.onCountryClick && propsRef.current.onCountryClick(best)
+      const hr = hitR()
+      if (best && bestD <= hr * hr) propsRef.current.onCountryClick && propsRef.current.onCountryClick(best)
     }
 
     function zoomBy(factor) {
       if (st.transitioned) return
       st.lastInteract = st.now || performance.now()
-      // 이미 최대치인데 더 확대 → 기본 지역(한국) 지도로 전환
+      // 이미 최대치인데 더 확대 → 보고 있는 중심에서 가장 가까운 나라 지도로 전환
       if (factor > 1 && st.targetScale >= st.max - 0.5) {
         st.transitioned = true
-        propsRef.current.onZoomThrough && propsRef.current.onZoomThrough()
+        const rot = projection.rotate()
+        const center = [-rot[0], -rot[1]]
+        let best = COUNTRIES[0], bestD = Infinity
+        for (const c of COUNTRIES) {
+          const d = geoDistance(c.center, center)
+          if (d < bestD) { bestD = d; best = c }
+        }
+        propsRef.current.onZoomThrough && propsRef.current.onZoomThrough(best)
         return
       }
       st.targetScale = Math.min(Math.max(st.targetScale * factor, st.min), st.max)
@@ -160,6 +178,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       st.pointers.set(e.pointerId, [e.clientX, e.clientY])
       st.lastInteract = st.now
       st.vx = st.vy = 0
+      st.hoverIdx = -1 // 드래그 시작하면 호버 해제
       if (st.pointers.size === 1) {
         st.dragging = true; st.moved = false; st.lastPt = [e.clientX, e.clientY]; st.downPt = [e.clientX, e.clientY]
       } else if (st.pointers.size === 2) {
@@ -169,8 +188,34 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       }
       try { canvas.setPointerCapture(e.pointerId) } catch (_) {}
     }
+    // 호버: 커서 근처(35px) 핀을 찾아 하이라이트 + 커서 변경 + 자전 일시정지
+    function updateHover(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect()
+      const mx = clientX - rect.left, my = clientY - rect.top
+      const R = projection.scale()
+      const cx = st.W / 2, cy = st.H / 2
+      let idx = -1
+      if ((mx - cx) ** 2 + (my - cy) ** 2 <= R * R) {
+        const rot = projection.rotate()
+        const center = [-rot[0], -rot[1]]
+        const hr = hitR()
+        let bestD = hr * hr
+        for (let i = 0; i < COUNTRIES.length; i++) {
+          const c = COUNTRIES[i]
+          if (geoDistance(c.center, center) >= Math.PI / 2) continue
+          const p = projection(c.center); if (!p) continue
+          const d = (p[0] - mx) ** 2 + (p[1] - 8 - my) ** 2
+          if (d <= bestD) { bestD = d; idx = i }
+        }
+      }
+      if (idx !== st.hoverIdx) {
+        st.hoverIdx = idx
+        canvas.style.cursor = idx >= 0 ? 'pointer' : ''
+      }
+      if (idx >= 0) st.lastInteract = st.now // 핀 조준 중엔 자전 멈춤
+    }
     function onMove(e) {
-      if (!st.pointers.has(e.pointerId)) return
+      if (!st.pointers.has(e.pointerId)) { updateHover(e.clientX, e.clientY); return }
       st.pointers.set(e.pointerId, [e.clientX, e.clientY])
       st.lastInteract = st.now
       // 두 손가락 → 핀치 줌
@@ -216,8 +261,10 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       zoomBy(e.deltaY < 0 ? 1.12 : 0.89)
     }
 
+    function onLeave() { if (st.hoverIdx !== -1) { st.hoverIdx = -1; canvas.style.cursor = '' } }
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointermove', onMove)
+    canvas.addEventListener('pointerleave', onLeave)
     canvas.addEventListener('click', onClick)
     canvas.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('pointerup', onUp)
@@ -260,12 +307,10 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
           st.vx *= 0.92; st.vy *= 0.92
         } else {
           st.vx = st.vy = 0
-          // 가만두면 한국 주변에서 살랑살랑 (멀리 안 가서 항상 클릭 가능)
+          // 가만두면 천천히 자전 (여러 나라가 돌아가며 앞면에 보이게)
           if (now - st.lastInteract > IDLE_MS && st.targetScale <= st.fit * 1.05 && !st.transitioned) {
             const r = projection.rotate()
-            const tLon = st.homeLon + Math.sin(now / 3500) * 22
-            const tLat = st.homeLat + Math.sin(now / 5200) * 6
-            projection.rotate([r[0] + (tLon - r[0]) * 0.02, r[1] + (tLat - r[1]) * 0.02])
+            projection.rotate([r[0] + 0.06, r[1] + (st.homeLat - r[1]) * 0.01])
           }
         }
       }
@@ -280,6 +325,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       ro.disconnect()
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
+      canvas.removeEventListener('pointerleave', onLeave)
       canvas.removeEventListener('click', onClick)
       canvas.removeEventListener('wheel', onWheel)
       window.removeEventListener('pointerup', onUp)
@@ -298,7 +344,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
   return (
     <>
       <canvas ref={canvasRef} className="globe-canvas" />
-      <div className="globe-hint">지구본을 클릭하면 한국 지도로 들어가요 📍</div>
+      <div className="globe-hint">지구본을 돌려 나라를 클릭하면 지도로 들어가요 📍</div>
       <div className="zoom">
         <div onClick={() => zoom(1.25)}>＋</div>
         <div onClick={() => zoom(0.8)}>－</div>
