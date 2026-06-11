@@ -7,15 +7,6 @@ import { getRestaurants, getCuration } from '../lib/places.js'
 import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
 import { COUNTRIES } from '../data/countries.js'
 
-// 좌표가 속한 나라(bbox 기준, 앞에서부터 먼저 매칭). 없으면 ''.
-function countryAt(lat, lng) {
-  for (const c of COUNTRIES) {
-    const [w, s, e, n] = c.bbox
-    if (lng >= w && lng <= e && lat >= s && lat <= n) return c.name
-  }
-  return ''
-}
-
 export default function Home() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('reviews')
@@ -112,12 +103,7 @@ export default function Home() {
   }
   // 클릭: 선택 + 지도 포커스 + 상세 패널(왼쪽)
   const onPick = (d) => { setSelectedId(d.id); setOpenItem(d) }
-  const onBoundsChange = (b) => {
-    mapBoundsRef.current = b
-    // 지도 중심이 속한 나라로 나라 칩 자동 전환
-    const name = countryAt((b[1] + b[3]) / 2, (b[0] + b[2]) / 2)
-    if (name) setCountry((cur) => (cur === name ? cur : name))
-  }
+  const onBoundsChange = (b) => { mapBoundsRef.current = b }
 
   // 모바일 바텀시트: 핸들을 위/아래로 끌면 가까운 스냅 지점에 달라붙음
   const sheetY = (state, h) => (state === 'full' ? 0 : state === 'half' ? h * 0.5 : Math.max(0, h - 60))
@@ -226,6 +212,7 @@ export default function Home() {
       {filtersOpen && <div className="filter-backdrop" onClick={() => setFiltersOpen(false)} />}
       <div className={`filterpanel ${filtersOpen ? 'open' : ''}`}>
         <div className="sheet-handle" onClick={() => setFiltersOpen(false)}><span className="sheet-grip" /></div>
+        <button className="filterpanel-close" onClick={() => setFiltersOpen(false)} aria-label="닫기">×</button>
         <div className="filter-controls">
           <select className="sortsel" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="reviews">리뷰 많은순</option>

@@ -135,10 +135,42 @@ header {
 .results::-webkit-scrollbar { display: none; }
 .sheet-handle { display: none; } /* 모바일에서만 표시(드래그 핸들) */
 .results-foot { display: none; } /* 모바일에서만 리스트 하단에 표시 */
-.filters-toggle { display: none; } /* 모바일에서만 표시(필터 시트 열기) */
-.filter-backdrop { display: none; }
-/* 데스크탑: 정렬/개수/저장 한 줄 */
-.filter-controls { display: flex; align-items: center; gap: 10px; padding: 6px 24px 0; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
+/* 검색 옆 '필터' 버튼 → 아래에서 올라오는 시트 (웹·모바일 공통) */
+.filters-toggle {
+  display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; white-space: nowrap; cursor: pointer;
+  padding: 9px 15px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); box-shadow: var(--shadow-sm); font-size: 13.5px; font-weight: 600; color: #444;
+  transition: transform .12s, box-shadow .12s;
+}
+.filters-toggle:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.filterpanel {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001;
+  background: var(--surface); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(25, 22, 18, .2);
+  max-height: 72vh; overflow-y: auto; padding-bottom: 18px;
+  transform: translateY(100%); transition: transform .32s cubic-bezier(.4, 0, .2, 1);
+}
+.filterpanel.open { transform: translateY(0); }
+.filterpanel .sheet-handle { display: flex; cursor: pointer; height: 28px; }
+.filter-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(20, 18, 15, .34); animation: fadeIn .2s ease; }
+.filterpanel-close { display: none; position: absolute; top: 12px; right: 14px; width: 30px; height: 30px; border: none; border-radius: 999px; background: #f1f1f3; color: #555; font-size: 20px; line-height: 1; align-items: center; justify-content: center; cursor: pointer; transition: background .12s; }
+.filterpanel-close:hover { background: #e3e3e7; }
+
+/* 데스크탑: 필터를 가운데 모달로 */
+@media (min-width: 761px) {
+  .filterpanel {
+    left: 50%; right: auto; top: 50%; bottom: auto;
+    width: 560px; max-width: 92vw; max-height: 82vh; padding: 18px 6px;
+    border-radius: 18px; box-shadow: var(--shadow-lg);
+    transform: translate(-50%, -50%) scale(.96); opacity: 0; pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .filterpanel.open { transform: translate(-50%, -50%) scale(1); opacity: 1; pointer-events: auto; }
+  .filterpanel .sheet-handle { display: none; }
+  .filterpanel-close { display: flex; }
+  .filter-controls { max-width: none; padding: 4px 18px 0; }
+}
+.filter-controls { display: flex; align-items: center; gap: 10px; padding: 8px 24px 0; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
+.filter-controls .save-toggle { margin-left: 0; } /* 패널 안에선 우측 끝(×)으로 안 밀리게 */
 .wrap.collapsed .results { transform: translateX(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
 /* 검색 시 잠깐 반투명 (지도 결과 들여다보기) */
 .results, .detail-panel { transition: opacity .35s ease; }
@@ -344,22 +376,8 @@ header {
   .search { flex: 1 1 auto; min-width: 0; padding: 0 6px 0 14px; } /* 입력 공간 확보 */
   .search-ic { display: none; } /* 검색 버튼과 중복 → 모바일에선 숨김 */
   .search-go { padding: 7px 13px; }
-  .filters-toggle {
-    display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; white-space: nowrap;
-    padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px;
-    background: var(--surface); box-shadow: var(--shadow-sm); font-size: 13px; font-weight: 600; color: #444;
-  }
-
-  /* 필터 패널 — 아래에서 올라오는 바텀시트 */
-  .filterpanel {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
-    background: var(--surface); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(25, 22, 18, .2);
-    max-height: 78vh; overflow-y: auto; padding-bottom: 16px;
-    transform: translateY(100%); transition: transform .32s cubic-bezier(.4, 0, .2, 1);
-  }
-  .filterpanel.open { transform: translateY(0); }
-  .filterpanel .sheet-handle { display: flex; cursor: pointer; height: 26px; }
-  .filter-backdrop { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(20, 18, 15, .34); animation: fadeIn .2s ease; }
+  .filters-toggle { padding: 8px 12px; font-size: 13px; } /* 모바일 컴팩트 */
+  .filterpanel { max-height: 78vh; }
   .filter-controls { padding: 4px 16px 0; max-width: none; }
   .search input { padding: 9px 0; font-size: 14px; }
   .sortsel { padding: 8px 11px; font-size: 13px; }
