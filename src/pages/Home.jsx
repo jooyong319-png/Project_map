@@ -74,7 +74,7 @@ export default function Home() {
     if (search.sort === 'rating') r = [...r].sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)
     else r = [...r].sort((a, b) => b.reviews - a.reviews) // 기본: 리뷰 많은순
     return r.slice(0, search.lim)
-  }, [items, savedItems, showingSaved, search])
+  }, [items, savedItems, showingSaved, search.sort, search.lim])
 
   // 지도 마커 = TOP10 + 저장한 맛집(검색에 없어도 항상 표시). 저장된 건 saved 표시.
   const mapItems = useMemo(() => {

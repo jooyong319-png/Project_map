@@ -7,15 +7,19 @@ import VectorBasemap from './VectorBasemap.jsx'
 const AREA_MIN_ZOOM = 12 // 이보다 멀면(축소) 검색 비활성 — 동네 단위로 확대해야 검색
 
 // 기본: 노란 원 / 저장된 곳: 별 모양 (SVG). i = 등장 순서(스태거 애니메이션용)
-function makeIcon(d, i) {
+// animate=false 면 팝 애니메이션 없이 즉시 표시(이미 떠 있던 마커 → 재검색 시 다시 안 튕김)
+function makeIcon(d, i, animate = true) {
   const saved = !!d.saved
   const shape = saved
     ? `<circle cx="12" cy="12" r="9" fill="#f5a623" stroke="#fff" stroke-width="2"/>` +
       `<path d="M12 6.4l1.6 3.34 3.68.32-2.79 2.43.84 3.6L12 14.2 8.67 16.1l.84-3.6-2.79-2.43 3.68-.32z" fill="#fff"/>`
     : `<circle cx="12" cy="12" r="8.5" fill="#ffce3a" stroke="#fff" stroke-width="2.5"/>`
+  const inner = animate
+    ? `<div class="mk3" style="animation-delay:${(i || 0) * 55}ms">`
+    : `<div class="mk-static">`
   return L.divIcon({
     className: 'mk-wrap',
-    html: `<div class="mk3" style="animation-delay:${(i || 0) * 55}ms"><svg viewBox="0 0 24 24" width="22" height="22">${shape}</svg></div>`,
+    html: `${inner}<svg viewBox="0 0 24 24" width="22" height="22">${shape}</svg></div>`,
     iconSize: [22, 22],
     iconAnchor: [11, 11],
     popupAnchor: [0, -11],
@@ -99,11 +103,18 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
   const mapRef = useRef(null)
   const [zoom, setZoom] = useState(initialZoom || KR_ZOOM)
   const canSearch = zoom >= AREA_MIN_ZOOM
-  // 아이콘은 items 가 바뀔 때만 새로 만든다(선택 변화로 깜빡이지 않게). 새 결과마다 스태거 팝 애니메이션.
+  // 아이콘은 items 가 바뀔 때만 새로 만든다(선택 변화로 깜빡이지 않게).
+  // 새로 등장한 마커만 팝 애니메이션(이미 떠 있던 마커는 재검색 시 다시 안 튕김 → "검색 2번" 버그 방지).
+  const seenRef = useRef(new Set())
   const icons = useMemo(() => {
     const m = new Map()
-    ;(items || []).filter((d) => d.lat != null && d.lng != null).forEach((d, i) => m.set(d.id, makeIcon(d, i)))
+    ;(items || []).filter((d) => d.lat != null && d.lng != null).forEach((d, i) => {
+      m.set(d.id, makeIcon(d, i, !seenRef.current.has(d.id)))
+    })
     return m
+  }, [items])
+  useEffect(() => {
+    ;(items || []).forEach((d) => { if (d.id != null) seenRef.current.add(d.id) })
   }, [items])
   const selItem = valid.find((d) => d.id === selected)
 

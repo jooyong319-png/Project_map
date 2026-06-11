@@ -189,8 +189,9 @@ header {
 
 /* 지도 마커 (노란 원 / 저장=별) */
 .mk-wrap { background: none; border: none; }
-.mk3 svg { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
+.mk3 svg, .mk-static svg { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
 .mk3 { animation: mkpop .55s cubic-bezier(.34, 1.6, .5, 1) both; }
+.mk-static { /* 이미 떠 있던 마커 → 애니메이션 없이 즉시 표시 */ }
 @keyframes mkpop {
   0%   { opacity: 0; transform: translateY(-16px) scale(.1); filter: hue-rotate(-58deg) saturate(3) brightness(1.15); }
   55%  { opacity: 1; transform: none; filter: hue-rotate(-58deg) saturate(3) brightness(1.15); }
