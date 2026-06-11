@@ -19,3 +19,18 @@ export const COUNTRIES = [
 
 // 지구본을 확대해 진입할 때 기본 지역
 export const DEFAULT_REGION = COUNTRIES[0]
+
+// 나라별 검색 키워드(필터 칩). 선택하면 그 키워드로 검색.
+export const KEYWORDS = {
+  대한민국: ['맛집', '줄서는 맛집', '노포', '내돈내산', '혼밥'],
+  일본: ['グルメ', 'レストラン', '居酒屋', 'おすすめ'],
+  중국: ['美食', '餐厅', '必吃', '探店'],
+  미국: ['must eat', 'top rated', 'Eater', 'best restaurant'],
+  프랑스: ['bistro', 'michelin bib gourmand', 'traditional french'],
+  이탈리아: ['trattoria', 'osteria', 'ristorante'],
+  영국: ['traditional british food', 'pub food', 'restaurant'],
+  스페인: ['tapas', 'restaurante', 'best restaurant'],
+  태국: ['street food', 'local food', 'restaurant'],
+  베트남: ['street food', 'local food', 'restaurant'],
+  호주: ['brunch', 'cafe', 'restaurant'],
+}

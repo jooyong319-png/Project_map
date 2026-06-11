@@ -8,10 +8,10 @@ const land = feature(worldData, worldData.objects.countries)
 const graticule = geoGraticule10()
 const IDLE_MS = 3500 // 이 시간 이상 가만두면 자동 회전 재개
 
-export default function Globe({ items, selected, onSelect, onCountryClick, onZoomThrough, flyTo, onFlyDone, initialCenter, initialScale }) {
+export default function Globe({ items, selected, onSelect, onCountryClick, onZoomThrough, onMoving, flyTo, onFlyDone, initialCenter, initialScale }) {
   const canvasRef = useRef(null)
   const propsRef = useRef({})
-  propsRef.current = { items, selected, onSelect, onCountryClick, onZoomThrough, onFlyDone }
+  propsRef.current = { items, selected, onSelect, onCountryClick, onZoomThrough, onMoving, onFlyDone }
   const stateRef = useRef(null)
 
   useEffect(() => {
@@ -179,6 +179,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       st.lastInteract = st.now
       st.vx = st.vy = 0
       st.hoverIdx = -1 // 드래그 시작하면 호버 해제
+      propsRef.current.onMoving && propsRef.current.onMoving(true) // 조작 중 → 패널 반투명
       if (st.pointers.size === 1) {
         st.dragging = true; st.moved = false; st.lastPt = [e.clientX, e.clientY]; st.downPt = [e.clientX, e.clientY]
       } else if (st.pointers.size === 2) {
@@ -245,6 +246,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
         st.dragging = false
         st.lastInteract = st.now
         if (!st.moved) st.vx = st.vy = 0 // 탭이면 관성 제거
+        propsRef.current.onMoving && propsRef.current.onMoving(false)
       }
     }
     // 탭은 네이티브 click 으로 처리. 누른 곳과 뗀 곳 거리가 작으면(손떨림 허용) 탭으로 간주.
@@ -259,6 +261,9 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
     function onWheel(e) {
       e.preventDefault()
       zoomBy(e.deltaY < 0 ? 1.12 : 0.89)
+      propsRef.current.onMoving && propsRef.current.onMoving(true)
+      clearTimeout(st.wheelT)
+      st.wheelT = setTimeout(() => { propsRef.current.onMoving && propsRef.current.onMoving(false) }, 220)
     }
 
     function onLeave() { if (st.hoverIdx !== -1) { st.hoverIdx = -1; canvas.style.cursor = '' } }
@@ -322,6 +327,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
     return () => {
       st.alive = false
       cancelAnimationFrame(st.raf)
+      clearTimeout(st.wheelT)
       ro.disconnect()
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)

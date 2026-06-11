@@ -9,13 +9,21 @@ const IC = {
 }
 const Icon = ({ d }) => <svg viewBox="0 0 24 24"><path d={d} /></svg>
 
-export default function DetailModal({ data, onClose, onBookmark, bookmarked }) {
+export default function DetailModal({ data, onClose, onBookmark, bookmarked, sheet = 'half' }) {
   const [det, setDet] = useState(null)
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState('')
   // 갤러리 드래그용 ref (반드시 early-return 위에서 호출 — Hooks 규칙)
   const galRef = useRef(null)
   const drag = useRef({ down: false, x: 0, left: 0 })
+  const [enter, setEnter] = useState(true) // 진입 시 아래에서 슬라이드 업
+
+  useEffect(() => {
+    if (!data?.id) return
+    setEnter(true)
+    const raf = requestAnimationFrame(() => setEnter(false))
+    return () => cancelAnimationFrame(raf)
+  }, [data?.id])
 
   useEffect(() => {
     if (!data?.id) return
@@ -55,7 +63,7 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked }) {
   }
 
   return (
-    <div className="detail-panel">
+    <div className={`detail-panel sheet-${sheet} ${enter ? 'sheet-enter' : ''}`}>
       <button className="detail-close" onClick={onClose} aria-label="닫기">×</button>
 
       <div className="detail-head">

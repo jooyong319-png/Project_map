@@ -41,15 +41,16 @@ header {
 .btn-login:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
 /* Filters */
-.filters { display: flex; align-items: center; gap: 12px; padding: 22px 24px 6px; max-width: 1200px; margin: 0 auto; }
+.filters { display: flex; align-items: center; gap: 10px; padding: 22px 24px 6px; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
 .search {
-  flex: 1; max-width: 480px; display: flex; align-items: center; gap: 10px;
+  flex: 0 1 500px; display: flex; align-items: center; gap: 10px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 0 18px;
   box-shadow: var(--shadow-sm); transition: border-color .15s, box-shadow .15s;
 }
 .search:focus-within { border-color: #f3b48f; box-shadow: 0 0 0 4px rgba(240, 121, 46, .12); }
-.search input { border: none; background: transparent; outline: none; flex: 1; font-size: 15px; padding: 12px 0; color: var(--ink); }
-.search-go { border: none; background: var(--grad); color: #fff; font-weight: 700; font-size: 13.5px; padding: 8px 16px; border-radius: 999px; margin-left: 4px; box-shadow: 0 2px 8px rgba(232, 84, 58, .3); transition: transform .12s; }
+.search-ic { width: 18px; height: 18px; fill: #9a9da3; flex-shrink: 0; }
+.search input { border: none; background: transparent; outline: none; flex: 1; min-width: 0; font-size: 15px; padding: 12px 0; color: var(--ink); }
+.search-go { border: none; background: var(--grad); color: #fff; font-weight: 700; font-size: 13.5px; padding: 8px 16px; border-radius: 999px; margin-left: 4px; box-shadow: 0 2px 8px rgba(232, 84, 58, .3); transition: transform .12s; white-space: nowrap; flex-shrink: 0; }
 .search-go:hover { transform: translateY(-1px); }
 .sortsel {
   border: 1px solid var(--line); border-radius: 999px; padding: 11px 16px; font-size: 14px; background: var(--surface);
@@ -65,6 +66,30 @@ header {
 .chip:hover { color: var(--ink); border-color: #ddd; transform: translateY(-1px); }
 .chip.active { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(232, 84, 58, .3); }
 .chip-div { width: 1px; height: 20px; background: var(--line); margin: 0 5px; align-self: center; }
+.filterbar { display: flex; flex-direction: column; gap: 6px; max-width: 1200px; margin: 0 auto; }
+.filterbar .chips { justify-content: flex-start; margin: 0; max-width: none; padding: 6px 24px; }
+/* 칩 1줄 가로 스와이프 */
+.chips-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; cursor: grab; touch-action: pan-x; }
+.chips-scroll::-webkit-scrollbar { display: none; }
+.chips-scroll:active { cursor: grabbing; }
+.chips-scroll .chip { flex-shrink: 0; }
+/* 키워드 칩: 키워드 + 작은 뜻(왼쪽 정렬) */
+.kw-chip { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 14px; line-height: 1.15; text-align: left; }
+.kw-chip .kw-main { font-size: 14px; }
+.kw-chip .kw-sub { font-size: 10px; font-weight: 400; opacity: .7; }
+
+/* 저장 토글 (개수 필터 오른쪽, SVG 별) */
+.save-toggle {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
+  color: #5c5f66; font-size: 14px; font-weight: 600; padding: 9px 14px; border-radius: 999px; box-shadow: var(--shadow-sm);
+  cursor: pointer; transition: transform .12s, box-shadow .12s, color .12s, border-color .12s;
+}
+.save-toggle svg { width: 17px; height: 17px; }
+.save-toggle svg path { fill: #d3d3d9; stroke: #bdbdc6; stroke-width: .5; transition: fill .15s; }
+.save-toggle:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.save-toggle.on { border-color: #f3c969; color: #b9821a; }
+.save-toggle.on svg path { fill: #f5a623; stroke: #e0931a; }
 
 .count { display: flex; align-items: center; gap: 8px; padding: 4px 24px 12px; font-size: 14px; color: var(--muted); max-width: 1200px; margin: 0 auto; }
 .count b { color: var(--ink); font-weight: 700; }
@@ -95,10 +120,18 @@ header {
   scrollbar-width: none;
 }
 .results::-webkit-scrollbar { display: none; }
+.sheet-handle { display: none; } /* 모바일에서만 표시(드래그 핸들) */
+.results-foot { display: none; } /* 모바일에서만 리스트 하단에 표시 */
+.filters-toggle { display: none; } /* 모바일에서만 표시(필터 시트 열기) */
+.filter-backdrop { display: none; }
+/* 데스크탑: 정렬/개수/저장 한 줄 */
+.filter-controls { display: flex; align-items: center; gap: 10px; padding: 6px 24px 0; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
 .wrap.collapsed .results { transform: translateX(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
 /* 검색 시 잠깐 반투명 (지도 결과 들여다보기) */
 .results, .detail-panel { transition: opacity .35s ease; }
 .wrap.peeking .results, .wrap.peeking .detail-panel { opacity: .22; pointer-events: none; }
+/* 지도 이동/줌 중 → 리스트·상세 반투명(지도 들여다보기) */
+.wrap.mapmoving .results, .wrap.mapmoving .detail-panel { opacity: .3; }
 
 .card {
   display: flex; gap: 13px; padding: 12px 14px; margin-bottom: 9px; align-items: center;
@@ -193,7 +226,9 @@ header {
   position: absolute; top: 12px; left: 384px; width: 330px; max-width: calc(100% - 396px); max-height: calc(100% - 24px); z-index: 15;
   background: #fff; border-radius: 16px; box-shadow: var(--shadow-lg); overflow-y: auto;
   animation: detailIn .22s ease both; transition: left .26s ease;
+  scrollbar-width: none;
 }
+.detail-panel::-webkit-scrollbar { display: none; }
 @keyframes detailIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 /* 리스트를 접으면 상세 패널이 리스트 자리로 이동 */
 .wrap.collapsed .detail-panel { left: 12px; }
@@ -233,16 +268,79 @@ header {
 .saved-page { padding-top: 14px; position: relative; }
 
 @media (max-width: 760px) {
-  .wrap { display: flex; flex-direction: column; height: auto; border-radius: 0; }
-  .mapwrap { min-height: 360px; order: 1; }
+  /* 지도가 화면 끝까지 → 리스트/상세 시트가 화면 바닥에서 올라옴 */
+  .wrap { height: calc(100vh - 128px); height: calc(100dvh - 128px); min-height: 420px; border-radius: 0; margin: 0; }
+  .mapwrap { position: absolute; inset: 0; min-height: 0; }
+
+  /* 리스트 바텀시트 (transform 으로 스냅 위치 제어) */
   .results {
-    position: static; order: 2; width: auto; max-width: none; inset: auto;
-    transform: none; opacity: 1; pointer-events: auto;
-    background: var(--surface-2); backdrop-filter: none; box-shadow: none; border-radius: 0;
-    padding: 10px; overflow: visible;
+    top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-width: none; height: 86%;
+    border-radius: 20px 20px 0 0; padding: 0 12px 14px;
+    box-shadow: 0 -8px 30px rgba(25, 22, 18, .16);
+    transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .2s ease;
+    transform: translateY(50%);
   }
-  .wrap.collapsed .results { display: none; }
-  .search { max-width: none; }
-  .filters { padding-top: 16px; }
-  .detail-panel { left: 8px; right: 8px; top: 8px; width: auto; max-width: none; }
+  .results.sheet-full { transform: translateY(0); }
+  .results.sheet-half { transform: translateY(50%); }
+  .results.sheet-collapsed { transform: translateY(calc(100% - 60px)); }
+  /* 진입: 화면 아래에서 슬라이드 업 (다음 프레임에 스냅으로 전환) */
+  .sheet-enter { transform: translateY(100%) !important; }
+  /* 상세가 열리면 뒤의 리스트는 내려서 핸들이 안 삐져나오게 */
+  .wrap.detail-open .results { transform: translateY(100%) !important; }
+
+  /* 드래그 핸들 (시트 상단) */
+  .sheet-handle {
+    display: flex; align-items: center; justify-content: center; height: 30px;
+    margin: 0 0 4px; cursor: grab; touch-action: none;
+  }
+  .sheet-handle:active { cursor: grabbing; }
+  .sheet-grip { width: 44px; height: 5px; border-radius: 999px; background: #d4d4da; }
+
+  .list-toggle { display: none; } /* 모바일은 핸들로 대체 */
+
+  /* 상세 시트 — 화면 절반 정도 높이로 열림(아래에서 슬라이드 업), 위를 덮음 */
+  .detail-panel, .wrap.collapsed .detail-panel {
+    top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-width: none;
+    height: 45%; max-height: 80%; border-radius: 20px 20px 0 0; z-index: 25;
+    box-shadow: 0 -8px 30px rgba(25, 22, 18, .22);
+    transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .2s ease;
+    transform: translateY(50%);
+  }
+
+  /* 검색은 항상 위 + 작은 '필터' 버튼(검색 오른쪽, 한 줄) */
+  .filters { padding: 10px 12px 4px; gap: 7px; flex-wrap: nowrap; }
+  .search { flex: 1 1 auto; min-width: 0; padding: 0 6px 0 14px; } /* 입력 공간 확보 */
+  .search-ic { display: none; } /* 검색 버튼과 중복 → 모바일에선 숨김 */
+  .search-go { padding: 7px 13px; }
+  .filters-toggle {
+    display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; white-space: nowrap;
+    padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--surface); box-shadow: var(--shadow-sm); font-size: 13px; font-weight: 600; color: #444;
+  }
+
+  /* 필터 패널 — 아래에서 올라오는 바텀시트 */
+  .filterpanel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    background: var(--surface); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(25, 22, 18, .2);
+    max-height: 78vh; overflow-y: auto; padding-bottom: 16px;
+    transform: translateY(100%); transition: transform .32s cubic-bezier(.4, 0, .2, 1);
+  }
+  .filterpanel.open { transform: translateY(0); }
+  .filterpanel .sheet-handle { display: flex; cursor: pointer; height: 26px; }
+  .filter-backdrop { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(20, 18, 15, .34); animation: fadeIn .2s ease; }
+  .filter-controls { padding: 4px 16px 0; max-width: none; }
+  .search input { padding: 9px 0; font-size: 14px; }
+  .sortsel { padding: 8px 11px; font-size: 13px; }
+  .save-toggle { margin-left: 0; padding: 7px 11px; font-size: 13px; }
+  .filterbar { gap: 3px; }
+  .filterbar .chips { padding: 3px 12px; gap: 6px; }
+  .kw-chip { padding: 5px 12px; }
+  .count { padding: 2px 12px 6px; font-size: 12.5px; }
+
+  /* 푸터는 리스트 시트 하단에 표시, 전역 푸터는 숨김 */
+  .footnote { display: none; }
+  .results-foot { display: block; padding: 14px 6px 6px; font-size: 11.5px; color: #b0b0b6; line-height: 1.5; }
 }
+@keyframes sheetUp { from { opacity: 0; } to { opacity: 1; } }
+@keyframes panelDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

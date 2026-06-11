@@ -49,11 +49,15 @@ function FocusOnSelect({ items, selected }) {
       const d = items.find((x) => x.id === selected)
       if (d && d.lat != null && d.lng != null) {
         const z = Math.max(map.getZoom(), 15)
+        const size = map.getSize()
+        const mp = map.project([d.lat, d.lng], z)
         let center = [d.lat, d.lng]
-        // 지도가 충분히 넓을 때만 오프셋(모바일/좁은 화면 제외)
-        if (map.getSize().x > 820) {
-          const mp = map.project([d.lat, d.lng], z)
+        if (size.x > 820) {
+          // 데스크탑: 왼쪽 리스트/상세 패널을 피해 오른쪽으로
           center = map.unproject(L.point(mp.x - LEFT_PANEL_PX / 2, mp.y), z)
+        } else {
+          // 모바일: 아래 바텀시트에 가리지 않게 마커를 화면 위쪽(약 28%)으로
+          center = map.unproject(L.point(mp.x, mp.y + size.y * 0.22), z)
         }
         map.flyTo(center, z, { duration: 0.6 })
       }
@@ -63,22 +67,33 @@ function FocusOnSelect({ items, selected }) {
   return null
 }
 
-// 줌 감시: 현재 줌 보고 + 너무 축소하면 지구본으로 복귀
-function ZoomWatcher({ onZoomOut, onZoom }) {
+// 줌/이동 감시: 현재 줌·영역 보고 + 너무 축소하면 지구본으로 복귀
+function ZoomWatcher({ onZoomOut, onZoom, onBounds, onMoving }) {
+  const report = (map) => {
+    if (!onBounds) return
+    const b = map.getBounds()
+    onBounds([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()])
+  }
   const map = useMapEvents({
+    movestart() { onMoving && onMoving(true) },
+    zoomstart() { onMoving && onMoving(true) },
     zoomend() {
       const z = map.getZoom()
       onZoom && onZoom(z)
+      report(map)
+      onMoving && onMoving(false)
       if (z <= MAP_MIN_ZOOM) {
         const c = map.getCenter()
         onZoomOut && onZoomOut([c.lng, c.lat]) // [lng, lat]
       }
     },
+    moveend() { report(map); onMoving && onMoving(false) },
   })
+  useEffect(() => { report(map) }, []) // 최초 1회
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, searching, limit = 10, initialCenter, initialZoom }) {
+export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, searching, limit = 10, initialCenter, initialZoom }) {
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
   const points = valid.map((d) => [d.lat, d.lng])
   const mapRef = useRef(null)
@@ -115,7 +130,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       <VectorBasemap />
       <FitBounds points={points} skip={!!initialCenter} />
       <FocusOnSelect items={valid} selected={selected} />
-      <ZoomWatcher onZoomOut={onZoomOut} onZoom={setZoom} />
+      <ZoomWatcher onZoomOut={onZoomOut} onZoom={setZoom} onBounds={onBounds} onMoving={onMoving} />
       {selItem && (
         <CircleMarker
           center={[selItem.lat, selItem.lng]}

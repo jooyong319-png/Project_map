@@ -12,6 +12,7 @@ export async function getRestaurants(query = '', opts = {}) {
     if (base) params.set('q', base)
     if (cat) params.set('cat', cat)
     if (opts.bbox) params.set('bbox', opts.bbox.join(','))
+    if (opts.global) params.set('global', '1') // 전세계 검색(지역 제한 없음)
     if (opts.openNow) params.set('open', '1') // 영업 중만 (구글 API openNow)
     const res = await fetch(`/api/places?${params.toString()}`)
     if (res.ok) {

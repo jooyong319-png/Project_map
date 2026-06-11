@@ -54,9 +54,10 @@ export default async function handler(req, res) {
   else queries = hasBbox ? regionQueries((bs + bn) / 2, (bw + be) / 2) : ['맛집 restaurant', '노포 현지인 맛집']
 
   const openNow = req.query?.open === '1'
+  const isGlobal = req.query?.global === '1'
   const restriction = hasBbox
     ? { locationRestriction: { rectangle: { low: { latitude: bs, longitude: bw }, high: { latitude: bn, longitude: be } } } }
-    : { regionCode: 'KR' }
+    : isGlobal ? {} : { regionCode: 'KR' } // global: 지역 제한 없음(전세계)
 
   // 키워드 세트마다 검색해서 결과 합치기(중복 제거)
   async function runSearch(textQuery) {
