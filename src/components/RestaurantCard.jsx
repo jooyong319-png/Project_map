@@ -1,3 +1,12 @@
+import { PRICE_LABEL } from '../data/countries.js'
+
+// 네이버 블로그 개수 표기: 12345 → "1.2만", 5600 → "5,600"
+export function fmtBlog(n) {
+  if (!n) return ''
+  if (n >= 10000) return (n / 10000).toFixed(1).replace(/\.0$/, '') + '만'
+  return Number(n).toLocaleString()
+}
+
 export default function RestaurantCard({ rank, data, selected, bookmarked, onOpen, onBookmark }) {
   const medal = rank === 1 ? 'medal-g' : rank === 2 ? 'medal-s' : rank === 3 ? 'medal-b' : ''
   return (
@@ -14,7 +23,7 @@ export default function RestaurantCard({ rank, data, selected, bookmarked, onOpe
           {data.tags?.length > 0 && <span className="tag-badge">🏅 {data.tags[0]}</span>}
         </div>
         <div className="meta">
-          {data.region}{data.cat ? ` · ${data.cat}` : ''}{data.price ? ` · ${data.price}` : ''}
+          {data.region}{data.cat ? ` · ${data.cat}` : ''}{data.priceLevel ? ` · ${PRICE_LABEL[data.priceLevel]}` : ''}
         </div>
         <div className="rating-row">
           {data.rating > 0 ? (
@@ -25,6 +34,7 @@ export default function RestaurantCard({ rank, data, selected, bookmarked, onOpe
           ) : (
             <span className="src-pill">{data.source === 'kakao' ? '카카오맵' : '정보'}</span>
           )}
+          {data.blog > 0 && <span className="blog-pill">📝 블로그 {fmtBlog(data.blog)}</span>}
         </div>
       </div>
       <button

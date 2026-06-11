@@ -73,6 +73,37 @@ header {
 .chips-scroll::-webkit-scrollbar { display: none; }
 .chips-scroll:active { cursor: grabbing; }
 .chips-scroll .chip { flex-shrink: 0; }
+/* 도시/동네(하위) 칩 — 살짝 작게 */
+.chip.sub { font-size: 13px; padding: 6px 13px; }
+.chip.sub2 { font-size: 12.5px; padding: 5px 12px; }
+/* 필터 안 키워드/가격 칩 — 가로 스크롤 대신 줄바꿈(여러 줄) */
+.filterbar .chips-wrap { flex-wrap: wrap; }
+/* 태그 필터(맛집/노포/혼밥) 칩 */
+.nopo-chip .nopo-sub { font-size: 11px; opacity: .6; margin-left: 4px; font-weight: 500; }
+.nopo-chip.active .nopo-sub { opacity: .85; }
+.filter-tag-label { font-size: 12px; font-weight: 700; color: #555; padding: 8px 24px 0; }
+.filter-tag-label span { font-weight: 500; color: #999; font-size: 11px; margin-left: 4px; }
+/* 필터 안 '지역' 버튼 */
+.region-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: #444; font-size: 13.5px; font-weight: 600; padding: 9px 15px; border-radius: 999px; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+.region-btn:hover { box-shadow: var(--shadow-md); }
+.region-btn.open { border-color: #f3b48f; color: var(--orange); }
+.region-arrow { font-size: 10px; color: var(--muted); margin-left: 2px; }
+
+/* 지역 선택 모달 (필터 모달 위) */
+.region-backdrop { position: fixed; inset: 0; z-index: 1100; background: rgba(20, 18, 15, .42); animation: fadeIn .15s ease; }
+.region-modal {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1101;
+  width: 560px; max-width: 92vw; max-height: 82vh; background: #fff; border-radius: 18px;
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; animation: regionIn .18s ease both;
+}
+@keyframes regionIn { from { opacity: 0; transform: translate(-50%, -50%) scale(.96); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+.region-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 16px; }
+.region-modal-close { width: 30px; height: 30px; border: none; border-radius: 999px; background: #f1f1f3; color: #555; font-size: 20px; line-height: 1; cursor: pointer; }
+.region-modal-close:hover { background: #e3e3e7; }
+.region-modal-body { padding: 8px 18px 14px; overflow-y: auto; }
+.region-label { font-size: 12px; color: var(--muted); font-weight: 700; margin: 14px 0 8px; }
+.region-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
+.region-done { margin: 6px 18px 16px; padding: 12px; border: none; background: var(--grad); color: #fff; font-size: 15px; font-weight: 700; border-radius: 12px; box-shadow: 0 4px 12px rgba(232, 84, 58, .3); cursor: pointer; }
 /* 키워드 칩: 키워드 + 작은 뜻(왼쪽 정렬) */
 .kw-chip { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 14px; line-height: 1.15; text-align: left; }
 .kw-chip .kw-main { font-size: 14px; }
@@ -96,6 +127,7 @@ header {
 .badge-mock { background: #fff1e6; color: var(--orange); font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
 /* 평점 없는(카카오) 카드 표시 */
 .src-pill { font-size: 11.5px; font-weight: 600; color: #f6a623; background: #fff6e0; padding: 2px 9px; border-radius: 999px; }
+.blog-pill { font-size: 11.5px; font-weight: 600; color: #1f9d4d; background: #e8f7ec; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
 /* 큐레이션 태그 뱃지 (카드 이름 옆) */
 .tag-badge { margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #b9821a; background: #fff3d6; padding: 2px 7px; border-radius: 999px; vertical-align: middle; white-space: nowrap; }
 .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -146,10 +178,12 @@ header {
 .filterpanel {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001;
   background: var(--surface); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(25, 22, 18, .2);
-  max-height: 72vh; overflow-y: auto; padding-bottom: 18px;
+  height: 76vh; max-height: 76vh; overflow: hidden; padding-bottom: 14px;
+  display: flex; flex-direction: column;
   transform: translateY(100%); transition: transform .32s cubic-bezier(.4, 0, .2, 1);
 }
 .filterpanel.open { transform: translateY(0); }
+.filter-scroll { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .filterpanel .sheet-handle { display: flex; cursor: pointer; height: 28px; }
 .filter-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(20, 18, 15, .34); animation: fadeIn .2s ease; }
 .filterpanel-close { display: none; position: absolute; top: 12px; right: 14px; width: 30px; height: 30px; border: none; border-radius: 999px; background: #f1f1f3; color: #555; font-size: 20px; line-height: 1; align-items: center; justify-content: center; cursor: pointer; transition: background .12s; }
@@ -159,7 +193,7 @@ header {
 @media (min-width: 761px) {
   .filterpanel {
     left: 50%; right: auto; top: 50%; bottom: auto;
-    width: 560px; max-width: 92vw; max-height: 82vh; padding: 18px 6px;
+    width: 560px; max-width: 92vw; height: 72vh; max-height: 72vh; padding: 14px 6px;
     border-radius: 18px; box-shadow: var(--shadow-lg);
     transform: translate(-50%, -50%) scale(.96); opacity: 0; pointer-events: none;
     transition: opacity .18s ease, transform .18s ease;
@@ -171,6 +205,10 @@ header {
 }
 .filter-controls { display: flex; align-items: center; gap: 10px; padding: 8px 24px 0; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
 .filter-controls .save-toggle { margin-left: 0; } /* 패널 안에선 우측 끝(×)으로 안 밀리게 */
+/* 필터 적용 버튼 */
+.filter-apply-wrap { max-width: 1200px; margin: 14px auto 0; padding: 0 18px; }
+.filter-apply { width: 100%; border: none; background: var(--grad); color: #fff; font-size: 15px; font-weight: 700; padding: 13px; border-radius: 12px; box-shadow: 0 4px 14px rgba(232, 84, 58, .3); transition: transform .12s, box-shadow .12s; }
+.filter-apply:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(232, 84, 58, .36); }
 .wrap.collapsed .results { transform: translateX(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
 /* 검색 시 잠깐 반투명 (지도 결과 들여다보기) */
 .results, .detail-panel { transition: opacity .35s ease; }
@@ -206,9 +244,9 @@ header {
 .info { flex: 1; min-width: 0; }
 .name { font-size: 15.5px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { font-size: 12.5px; color: var(--muted); margin: 4px 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rating-row { display: flex; align-items: center; gap: 8px; }
-.rating-pill { display: inline-flex; align-items: center; gap: 3px; background: #fff1e6; color: #e8682a; font-weight: 700; font-size: 12.5px; padding: 3px 9px; border-radius: 999px; }
-.reviews { font-size: 12px; color: #a8a8ae; }
+.rating-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rating-pill { display: inline-flex; align-items: center; gap: 3px; background: #fff1e6; color: #e8682a; font-weight: 700; font-size: 12.5px; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.reviews { font-size: 12px; color: #a8a8ae; white-space: nowrap; }
 /* (모달에서 쓰는) 일반 평점 텍스트 */
 .rating { font-size: 14px; color: var(--star); font-weight: 700; }
 .rating span { color: #b0b0b6; font-weight: 400; }
@@ -273,6 +311,7 @@ header {
 .area-search:hover { box-shadow: var(--shadow-lg); transform: translateX(-50%) translateY(-1px); }
 .area-search:active { transform: translateX(-50%); }
 .area-search:disabled { opacity: .7; cursor: default; }
+.wrap.detail-open .area-search { display: none; } /* 상세 열리면 '이 지역 TOP' 버튼 숨김(가림 방지) */
 /* 너무 멀 때: CTA 대신 확대 안내 (클릭/호버 반응 없음) */
 .area-search.hint { background: rgba(255, 255, 255, .94); color: #6a6d73; font-weight: 600; box-shadow: var(--shadow-md); cursor: default; transform: translateX(-50%); }
 .globe-hint {

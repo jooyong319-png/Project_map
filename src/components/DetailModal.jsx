@@ -1,4 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
+import { PRICE_LABEL } from '../data/countries.js'
+import { fmtBlog } from './RestaurantCard.jsx'
 
 const IC = {
   star: 'M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z',
@@ -74,11 +76,12 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
       <div className="detail-head">
         <h2>{data.name}</h2>
         <div className="detail-cat">
-          {data.cat}{data.price ? ` · ${data.price}` : ''}
+          {data.cat}{data.priceLevel ? ` · ${PRICE_LABEL[data.priceLevel]}` : ''}
           {data.rating > 0 ? (
             <> · <span className="detail-star">★ {Number(data.rating).toFixed(1)}</span>
             <span className="detail-rev"> ({Number(data.reviews).toLocaleString()})</span></>
           ) : isKakao ? <span className="detail-rev"> · 카카오맵</span> : null}
+          {data.blog > 0 && <span className="detail-rev"> · 📝 블로그 {fmtBlog(data.blog)}</span>}
         </div>
         {data.tags?.length > 0 && (
           <div className="detail-tags">

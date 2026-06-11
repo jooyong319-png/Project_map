@@ -56,12 +56,13 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
     )
   }
 
-  // 나라 필터 + 검색 → 그 나라로 이동 (리셋 없이, Home 이 이미 검색 커밋)
+  // 지역 필터 이동: 지구본이면 날아가서 지도 진입, 이미 지도면 부드럽게 flyTo(점프 X)
+  const [mapFly, setMapFly] = useState(null)
   const prevNav = useRef(null)
   useEffect(() => {
     if (navTo && navTo !== prevNav.current) {
       if (view === 'globe') enterWithFly(navTo.center, () => openRegion(navTo))
-      else openRegion(navTo)
+      else setMapFly({ center: navTo.center, zoom: navTo.zoom }) // 도착(moveend) 후 Home 이 검색
     }
     prevNav.current = navTo
   }, [navTo, view])
@@ -118,6 +119,7 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
             onBounds={onBounds}
             onMoving={onMoving}
             myLoc={myLoc}
+            flyTarget={mapFly}
             searching={loading}
             limit={limit}
             initialCenter={mapStart?.center}

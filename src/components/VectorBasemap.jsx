@@ -14,8 +14,9 @@ const STYLE = 'https://tiles.openfreemap.org/styles/bright'
 // 라벨 한국어화 + 불필요 레이어 숨김
 //  - 바다 이름(water_name), 도로명·고속도로 표지(transportation_name) 라벨
 //  - 행정 경계선(boundary) + 페리 항로(ferry) → 바다 위 선 제거
+//  - poi_transit = 버스 정류장 등 대중교통 POI (음식점·상점은 유지)
 const HIDE_SOURCE_LAYERS = ['water_name', 'transportation_name', 'boundary']
-const HIDE_IDS = ['ferry']
+const HIDE_IDS = ['ferry', 'poi_transit']
 function localizeKorean(glMap) {
   const layers = (glMap.getStyle()?.layers) || []
   for (const ly of layers) {

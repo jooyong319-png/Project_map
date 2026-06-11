@@ -119,7 +119,20 @@ function FlyToLoc({ loc }) {
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, searching, limit = 10, initialCenter, initialZoom }) {
+// 지역(필터) 이동 — 그 좌표/줌으로 부드럽게 flyTo. 도착(moveend) 후 검색이 트리거됨.
+function FlyToRegion({ target }) {
+  const map = useMap()
+  const prev = useRef(target)
+  useEffect(() => {
+    if (target && target !== prev.current) {
+      map.flyTo([target.center[1], target.center[0]], target.zoom, { duration: 0.9 })
+    }
+    prev.current = target
+  }, [target, map])
+  return null
+}
+
+export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, limit = 10, initialCenter, initialZoom }) {
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
   const points = valid.map((d) => [d.lat, d.lng])
   const mapRef = useRef(null)
@@ -166,6 +179,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       <FocusOnSelect items={valid} selected={selected} />
       <ZoomWatcher onZoomOut={onZoomOut} onZoom={setZoom} onBounds={onBounds} onMoving={onMoving} />
       <FlyToLoc loc={myLoc} />
+      <FlyToRegion target={flyTarget} />
       {selItem && (
         <CircleMarker
           center={[selItem.lat, selItem.lng]}

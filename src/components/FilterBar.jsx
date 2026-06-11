@@ -1,5 +1,5 @@
-import { useRef } from 'react'
-import { COUNTRIES, KEYWORDS } from '../data/countries.js'
+import { useRef, useState } from 'react'
+import { COUNTRIES, KEYWORDS, CITIES } from '../data/countries.js'
 
 // 키워드 뜻(작게 표시)
 const KW_DESC = {
@@ -37,18 +37,66 @@ function ChipRow({ children }) {
   )
 }
 
-export default function FilterBar({ country, onCountry, keyword, onKeyword }) {
+// 구글 priceLevel(1~4) → 1인 기준 대략 금액대 라벨(근사치)
+const PRICES = [[1, '~1만원'], [2, '1~3만원'], [3, '3~5만원'], [4, '5만원+']]
+
+// 리뷰 분석 태그 필터 (한국 한정 — 시드에서 검색)
+const TAG_CHIPS = [['맛집', '검증된 인기'], ['노포', '오래된 가게'], ['혼밥', '혼밥 친화'], ['핫플', 'SNS에서 핫한']]
+
+export default function FilterBar({ country, onCountry, city, onCity, area, onArea, keyword, onKeyword, price, onPrice, tags = [], onToggleTag }) {
+  const [regionModal, setRegionModal] = useState(false)
+  const isKorea = !country || country === '대한민국' // 태그 필터는 카카오(한국) 한정
   const kws = KEYWORDS[country] || []
+  const cities = CITIES[country] || []
+  const cityObj = cities.find((c) => c.name === city)
+  const areas = cityObj?.areas || []
+  const regionLabel = [country, city, area].filter(Boolean).join(' › ') || '지역 선택'
   return (
     <div className="filterbar">
-      <ChipRow>
-        {COUNTRIES.map((c) => (
-          <button key={c.name} className={`chip ${country === c.name ? 'active' : ''}`} onClick={() => onCountry(c.name)}>
-            {c.name}
-          </button>
-        ))}
-      </ChipRow>
-      <ChipRow>
+      <div className="chips" style={{ paddingTop: 6, paddingBottom: 0 }}>
+        <button className="region-btn" onClick={() => setRegionModal(true)}>
+          📍 {regionLabel}<span className="region-arrow">▾</span>
+        </button>
+      </div>
+
+      {regionModal && (
+        <>
+          <div className="region-backdrop" onClick={() => setRegionModal(false)} />
+          <div className="region-modal" role="dialog">
+            <div className="region-modal-head">
+              <span>지역 선택</span>
+              <button className="region-modal-close" onClick={() => setRegionModal(false)} aria-label="닫기">×</button>
+            </div>
+            <div className="region-modal-body">
+              <div className="region-label">나라</div>
+              <div className="region-wrap">
+                {COUNTRIES.map((c) => (
+                  <button key={c.name} className={`chip ${country === c.name ? 'active' : ''}`} onClick={() => onCountry(c.name)}>{c.name}</button>
+                ))}
+              </div>
+              {cities.length > 0 && <>
+                <div className="region-label">도시</div>
+                <div className="region-wrap">
+                  {cities.map((c) => (
+                    <button key={c.name} className={`chip sub ${city === c.name ? 'active' : ''}`} onClick={() => onCity(c)}>{c.name}</button>
+                  ))}
+                </div>
+              </>}
+              {areas.length > 0 && <>
+                <div className="region-label">동네</div>
+                <div className="region-wrap">
+                  {areas.map((a) => (
+                    <button key={a.name} className={`chip sub2 ${area === a.name ? 'active' : ''}`} onClick={() => onArea(a)}>{a.name}</button>
+                  ))}
+                </div>
+              </>}
+            </div>
+            <button className="region-done" onClick={() => setRegionModal(false)}>완료</button>
+          </div>
+        </>
+      )}
+
+      <div className="chips chips-wrap">
         <button className={`chip ${keyword === '' ? 'active' : ''}`} onClick={() => onKeyword('')}>전체</button>
         {kws.map((k) => (
           <button key={k} className={`chip kw-chip ${keyword === k ? 'active' : ''}`} onClick={() => onKeyword(k)}>
@@ -56,7 +104,26 @@ export default function FilterBar({ country, onCountry, keyword, onKeyword }) {
             {KW_DESC[k] && <span className="kw-sub">{KW_DESC[k]}</span>}
           </button>
         ))}
-      </ChipRow>
+      </div>
+      <div className="chips chips-wrap">
+        <button className={`chip ${!price ? 'active' : ''}`} onClick={() => onPrice(0)}>가격 전체</button>
+        {PRICES.map(([lv, label]) => (
+          <button key={lv} className={`chip ${price === lv ? 'active' : ''}`} onClick={() => onPrice(price === lv ? 0 : lv)}>{label}</button>
+        ))}
+      </div>
+
+      {isKorea && (
+        <>
+          <div className="filter-tag-label">태그 <span>리뷰 분석 · 저장된 곳에서</span></div>
+          <div className="chips chips-wrap">
+            {TAG_CHIPS.map(([t, desc]) => (
+              <button key={t} className={`chip nopo-chip ${tags.includes(t) ? 'active' : ''}`} onClick={() => onToggleTag(t)}>
+                {t} <span className="nopo-sub">{desc}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

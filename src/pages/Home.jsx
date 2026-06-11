@@ -10,9 +10,9 @@ import { COUNTRIES } from '../data/countries.js'
 export default function Home() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('reviews')
-  const [limit, setLimit] = useState(10) // 보여줄 개수 10/30/50
+  const [limit, setLimit] = useState(50) // 보여줄 개수 50/100/200
   const [items, setItems] = useState([])
-  const [search, setSearch] = useState({ q: '', bbox: null, sort: 'reviews', lim: 10, tick: 0 }) // 커밋된 검색 조건
+  const [search, setSearch] = useState({ q: '', bbox: null, sort: 'reviews', lim: 50, price: 0, tick: 0 }) // 커밋된 검색 조건
   const [source, setSource] = useState('mock')
   const [loading, setLoading] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
@@ -25,6 +25,7 @@ export default function Home() {
   const [mapMoving, setMapMoving] = useState(false) // 지도 이동/줌 중 → 리스트·상세 반투명
   const peekTimer = useRef(null)
   const mapBoundsRef = useRef(null) // 현재 지도 영역(검색 기준)
+  const pendingSearchRef = useRef(null) // 지역 이동 후 자동 검색 예약 {q}
   // 모바일 바텀시트 드래그 스냅 ('full' | 'half' | 'collapsed')
   const [sheet, setSheet] = useState('half')
   const sheetRef = useRef(null)
@@ -32,9 +33,15 @@ export default function Home() {
   const [sheetEnter, setSheetEnter] = useState(true) // 첫 진입 시 아래에서 슬라이드 업
   // 필터
   const [country, setCountry] = useState('') // 지구본 상태에선 선택 없음
+  const [city, setCity] = useState('') // 도시
+  const [area, setArea] = useState('') // 동네
   const [keyword, setKeyword] = useState('') // 나라별 키워드 ('' = 전체)
+  const [price, setPrice] = useState(0) // 가격대 0=전체, 1~4 = ₩~₩₩₩₩ (priceLevel)
+  const [tags, setTags] = useState([]) // 태그 필터(맛집/노포/혼밥) — 한국 한정, 시드에서 검색
+  const toggleTag = (t) => setTags((ts) => (ts.includes(t) ? ts.filter((x) => x !== t) : [...ts, t]))
   const [bookmarkOnly, setBookmarkOnly] = useState(false)
   const [navTo, setNavTo] = useState(null) // 나라 필터 검색 시 지도 이동 신호
+  const [regionTarget, setRegionTarget] = useState(null) // 선택한 지역 {center,zoom} ('필터 적용' 시 이동+검색)
 
   // 데이터 로드 — 커밋된 검색(search)이 바뀔 때만. 진입(tick 0) 시엔 검색 안 하고 저장된 곳만 표시.
   // 최소 로딩 시간을 둬서 "검색 중" 표시가 살짝 보이게(천천히 검색되는 느낌).
@@ -45,7 +52,7 @@ export default function Home() {
     const start = Date.now()
     const fetcher = search.curation
       ? getCuration()
-      : getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim })
+      : getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim, tags: search.tags })
     fetcher.then(({ items, source }) => {
       const wait = Math.max(0, 900 - (Date.now() - start))
       setTimeout(() => {
@@ -76,8 +83,9 @@ export default function Home() {
     let r = showingSaved ? savedItems : items
     if (search.sort === 'rating') r = [...r].sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)
     else r = [...r].sort((a, b) => b.reviews - a.reviews) // 기본: 리뷰 많은순
+    if (search.price) r = r.filter((d) => d.priceLevel === search.price) // 가격대 필터(가격 미상은 제외)
     return r.slice(0, search.lim)
-  }, [items, savedItems, showingSaved, search.sort, search.lim])
+  }, [items, savedItems, showingSaved, search.sort, search.lim, search.price])
 
   // 지도 마커 = TOP10 + 저장한 맛집(검색에 없어도 항상 표시). 저장된 건 saved 표시.
   const mapItems = useMemo(() => {
@@ -103,7 +111,15 @@ export default function Home() {
   }
   // 클릭: 선택 + 지도 포커스 + 상세 패널(왼쪽)
   const onPick = (d) => { setSelectedId(d.id); setOpenItem(d) }
-  const onBoundsChange = (b) => { mapBoundsRef.current = b }
+  const onBoundsChange = (b) => {
+    mapBoundsRef.current = b
+    // 지역 이동 후 도착하면(지도가 영역 보고) 그때 검색
+    if (pendingSearchRef.current) {
+      const p = pendingSearchRef.current
+      pendingSearchRef.current = null
+      commitSearch(b, p.q)
+    }
+  }
 
   // 모바일 바텀시트: 핸들을 위/아래로 끌면 가까운 스냅 지점에 달라붙음
   const sheetY = (state, h) => (state === 'full' ? 0 : state === 'half' ? h * 0.5 : Math.max(0, h - 60))
@@ -143,7 +159,7 @@ export default function Home() {
   // 검색 커밋 (현재 검색어/필터 + bbox 로). 이걸 호출할 때만 실제 검색이 일어난다.
   const commitSearch = (bbox = null, qOverride, global = false) => {
     triggerPeek()
-    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, global, sort, lim: limit, tick: s.tick + 1 }))
+    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, global, sort, lim: limit, price, tags, tick: s.tick + 1 }))
   }
 
   // 지도 "이 지역 TOP N" → 현재 영역에서 (선택 키워드로) 검색
@@ -155,6 +171,18 @@ export default function Home() {
     if (b) commitSearch(b, q)             // 지도: 현재 보고 있는 영역
     else { if (!q) return; commitSearch(null, q, true) } // 지구본: 전세계 검색
   }
+  // 필터 패널의 '필터 적용' → 선택 지역으로 이동 + 그 지역에서 검색 + 패널 닫기
+  const applyFilters = () => {
+    setFiltersOpen(false)
+    if (regionTarget) {
+      setQuery('')
+      pendingSearchRef.current = { q: keyword } // 지도 도착 후 검색 예약
+      setNavTo({ center: regionTarget.center, zoom: regionTarget.zoom }) // 그 지역으로 이동 → 도착하면 onBoundsChange 가 검색
+    } else {
+      runTextSearch() // 지역 선택 없으면 현재 보는 영역에서 검색
+    }
+  }
+
   // 🏆 화제의 맛집(큐레이션) 불러오기 — 어디서든
   const loadCuration = () => {
     triggerPeek()
@@ -163,22 +191,29 @@ export default function Home() {
     setSearch((s) => ({ q: '', bbox: null, sort, lim: limit, tick: s.tick + 1, curation: true }))
   }
 
-  // 나라 칩 클릭 → 그 나라로 이동만 (검색은 안 함)
+  // 지역 칩은 '선택'만 — 지도 이동/검색은 '필터 적용' 누를 때
   const onCountry = (name) => {
     const c = COUNTRIES.find((x) => x.name === name)
     if (!c) return
-    onReset(name) // 리스트 초기화 + 나라 설정
-    setNavTo({ ...c }) // 지도 이동만
+    setCountry(name); setCity(''); setArea(''); setKeyword('')
+    setRegionTarget({ center: c.center, zoom: c.zoom })
   }
+  const onCity = (c) => { setCity(c.name); setArea(''); setRegionTarget({ center: c.center, zoom: c.zoom }) }
+  const onArea = (a) => { setArea(a.name); setRegionTarget({ center: a.center, zoom: a.zoom }) }
   // 지역 진입/이탈 시 리스트 초기화(기본=저장 뷰) + 선택 해제
   const onReset = (countryName) => {
     setQuery('')
     setKeyword('')
+    setPrice(0)
+    setTags([])
     setBookmarkOnly(false)
     setCountry(countryName || '') // 지구본 복귀 시 선택 해제
+    setCity('')
+    setArea('')
+    setRegionTarget(null)
     setSort('reviews')
-    setLimit(10)
-    setSearch({ q: '', bbox: null, sort: 'reviews', lim: 10, tick: 0 })
+    setLimit(50)
+    setSearch({ q: '', bbox: null, sort: 'reviews', lim: 50, price: 0, tick: 0 })
     setSelectedId(null)
     setOpenItem(null)
     mapBoundsRef.current = null
@@ -213,15 +248,16 @@ export default function Home() {
       <div className={`filterpanel ${filtersOpen ? 'open' : ''}`}>
         <div className="sheet-handle" onClick={() => setFiltersOpen(false)}><span className="sheet-grip" /></div>
         <button className="filterpanel-close" onClick={() => setFiltersOpen(false)} aria-label="닫기">×</button>
+        <div className="filter-scroll">
         <div className="filter-controls">
           <select className="sortsel" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="reviews">리뷰 많은순</option>
             <option value="rating">평점 높은순</option>
           </select>
           <select className="sortsel" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-            <option value={10}>10개</option>
-            <option value={30}>30개</option>
             <option value={50}>50개</option>
+            <option value={100}>100개</option>
+            <option value={200}>200개</option>
           </select>
           <button
             className={`save-toggle ${bookmarkOnly ? 'on' : ''}`}
@@ -235,8 +271,16 @@ export default function Home() {
         </div>
         <FilterBar
           country={country} onCountry={onCountry}
+          city={city} onCity={onCity}
+          area={area} onArea={onArea}
           keyword={keyword} onKeyword={setKeyword}
+          price={price} onPrice={setPrice}
+          tags={tags} onToggleTag={toggleTag}
         />
+        </div>
+        <div className="filter-apply-wrap">
+          <button className="filter-apply" onClick={applyFilters}>필터 적용</button>
+        </div>
       </div>
 
       <div className="count">

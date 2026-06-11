@@ -26,6 +26,24 @@ export async function getRestaurants(query = '', opts = {}) {
   const base = query.trim()
   const cat = opts.category && opts.category !== '전체' ? opts.category : ''
   const bbox = opts.bbox
+  const tags = Array.isArray(opts.tags) ? opts.tags.filter(Boolean) : []
+
+  // 태그 필터(맛집/노포/혼밥) 선택 시 → 저장된 시드에서 검색
+  if (tags.length) {
+    try {
+      const p = new URLSearchParams()
+      p.set('tags', tags.join(','))
+      if (bbox) p.set('bbox', bbox.join(','))
+      if (opts.limit) p.set('enrich', String(opts.limit))
+      const res = await fetch(`/api/seed?${p.toString()}`)
+      if (res.ok) {
+        const data = await res.json()
+        return { items: Array.isArray(data.places) ? data.places : [], source: 'seed' }
+      }
+    } catch (_) {}
+    return { items: [], source: 'seed' }
+  }
+
   const useKakao = Array.isArray(bbox) && isKorea((bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2)
   const endpoints = useKakao ? ['/api/kakao', '/api/places'] : ['/api/places']
   // 키워드/카테고리를 따로 보내고, 실제 검색어 변환은 서버에서(전 세계 통하게)
@@ -36,6 +54,7 @@ export async function getRestaurants(query = '', opts = {}) {
     if (bbox) params.set('bbox', bbox.join(','))
     if (opts.global) params.set('global', '1') // 전세계 검색(지역 제한 없음)
     if (opts.openNow) params.set('open', '1') // 영업 중만 (구글 API openNow)
+    if (opts.oldschool) params.set('oldschool', '1') // 노포(오래된 가게)만 — 카카오 한정
     if (useKakao && opts.limit) params.set('enrich', String(opts.limit)) // 카카오 결과를 구글로 보강할 개수
     for (const ep of endpoints) {
       const res = await fetch(`${ep}?${params.toString()}`)

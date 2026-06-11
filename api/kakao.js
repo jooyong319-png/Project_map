@@ -18,8 +18,11 @@ export function catFromKakao(name = '') {
   return '기타'
 }
 
-// 카카오 가게를 구글에 이름+좌표로 매칭해 평점·리뷰·사진을 가져온다.
+import { cachedEnrich } from './gcache.js'
+
+// 카카오 가게를 구글에 이름+좌표로 매칭해 평점·사진을 가져온다 (표시용).
 // (구글 키 있을 때만, 좌표가 ~300m 내로 맞을 때만 채택)
+// 태그는 네이버 블로그(api/naver.js)로 따로 판정한다 — 여긴 평점·사진만.
 export async function enrichWithGoogle(item, gkey) {
   try {
     const body = {
@@ -122,13 +125,10 @@ export default async function handler(req, res) {
       }
     })
 
-    // 구글 보강: 보여줄 상위 N개에 평점·리뷰·사진 채우기 (구글 키 있을 때)
+    // 구글 보강: 보여줄 상위 N개에 평점·리뷰·사진 채우기 (캐시 우선, 14일 지난 것만 재호출)
     const gkey = process.env.GOOGLE_PLACES_API_KEY
-    const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 40)
-    if (gkey && enrichN > 0) {
-      const head = await Promise.all(places.slice(0, enrichN).map((it) => enrichWithGoogle(it, gkey)))
-      places = [...head, ...places.slice(enrichN)]
-    }
+    const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 45)
+    if (gkey && enrichN > 0) places = await cachedEnrich(places, enrichN, (it) => enrichWithGoogle(it, gkey))
 
     res.status(200).json({ places })
   } catch (e) {
