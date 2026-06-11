@@ -155,8 +155,12 @@ header {
 /* 지도 마커 (노란 원 / 저장=별) */
 .mk-wrap { background: none; border: none; }
 .mk3 svg { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
-.mk3 { animation: mkpop .36s cubic-bezier(.34, 1.55, .5, 1) both; }
-@keyframes mkpop { 0% { opacity: 0; transform: translateY(-10px) scale(.3); } 70% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+.mk3 { animation: mkpop .55s cubic-bezier(.34, 1.6, .5, 1) both; }
+@keyframes mkpop {
+  0%   { opacity: 0; transform: translateY(-16px) scale(.1); filter: hue-rotate(-58deg) saturate(3) brightness(1.15); }
+  55%  { opacity: 1; transform: none; filter: hue-rotate(-58deg) saturate(3) brightness(1.15); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
 .area-search .spin { display: inline-block; width: 12px; height: 12px; margin-right: 7px; vertical-align: -1px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

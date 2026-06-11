@@ -22,6 +22,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       .clipAngle(90)
       .rotate(initialCenter ? [-initialCenter[0], -initialCenter[1]] : [-127.5, -36])
     const path = geoPath(projection, ctx)
+    const home = projection.rotate() // 한국 중심 홈 회전값(자동 모션이 여기서 멀어지지 않게)
 
     const st = {
       W: 0, H: 0,
@@ -30,6 +31,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       vx: 0, vy: 0,            // 드래그 관성 속도(도/프레임)
       dragging: false, moved: false, lastPt: null,
       pointers: new Map(), pinchDist: 0,
+      homeLon: home[0], homeLat: home[1],
       now: 0, lastInteract: initialCenter ? performance.now() : 0,
       transitioned: false, raf: 0, alive: true,
     }
@@ -123,18 +125,22 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
     function handleTap(clientX, clientY) {
       const rect = canvas.getBoundingClientRect()
       const mx = clientX - rect.left, my = clientY - rect.top
+      // 구체(글로브) 밖 클릭(우주)은 무시
+      const R = projection.scale()
+      const cx = st.W / 2, cy = st.H / 2
+      if ((mx - cx) ** 2 + (my - cy) ** 2 > R * R) return
       const rot = projection.rotate()
       const center = [-rot[0], -rot[1]]
-      // 1) 지역 핀 우선 — 핀 + 라벨까지 넉넉한 히트 영역(중심을 핀과 라벨 사이로)
+      // 앞면에 보이는 핀 중 클릭 지점에서 가장 가까운 것으로 진입(핀이 하나면 무조건 그 핀)
+      let best = null, bestD = Infinity
       for (let i = 0; i < COUNTRIES.length; i++) {
         const c = COUNTRIES[i]
         if (geoDistance(c.center, center) >= Math.PI / 2) continue
         const p = projection(c.center); if (!p) continue
-        if ((p[0] - mx) ** 2 + (p[1] - 8 - my) ** 2 <= 28 * 28) {
-          propsRef.current.onCountryClick && propsRef.current.onCountryClick(c)
-          return
-        }
+        const d = (p[0] - mx) ** 2 + (p[1] - 8 - my) ** 2
+        if (d < bestD) { bestD = d; best = c }
       }
+      if (best) propsRef.current.onCountryClick && propsRef.current.onCountryClick(best)
     }
 
     function zoomBy(factor) {
@@ -254,9 +260,12 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
           st.vx *= 0.92; st.vy *= 0.92
         } else {
           st.vx = st.vy = 0
+          // 가만두면 한국 주변에서 살랑살랑 (멀리 안 가서 항상 클릭 가능)
           if (now - st.lastInteract > IDLE_MS && st.targetScale <= st.fit * 1.05 && !st.transitioned) {
             const r = projection.rotate()
-            projection.rotate([r[0] + 0.12, r[1]])
+            const tLon = st.homeLon + Math.sin(now / 3500) * 22
+            const tLat = st.homeLat + Math.sin(now / 5200) * 6
+            projection.rotate([r[0] + (tLon - r[0]) * 0.02, r[1] + (tLat - r[1]) * 0.02])
           }
         }
       }
@@ -289,7 +298,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
   return (
     <>
       <canvas ref={canvasRef} className="globe-canvas" />
-      <div className="globe-hint">한국 핀을 클릭하거나, 확대하면 지도로 들어가요 📍</div>
+      <div className="globe-hint">지구본을 클릭하면 한국 지도로 들어가요 📍</div>
       <div className="zoom">
         <div onClick={() => zoom(1.25)}>＋</div>
         <div onClick={() => zoom(0.8)}>－</div>
