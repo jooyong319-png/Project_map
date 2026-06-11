@@ -43,7 +43,7 @@ export default function Home() {
     let active = true
     setLoading(true)
     const start = Date.now()
-    getRestaurants(search.q, { bbox: search.bbox, global: search.global }).then(({ items, source }) => {
+    getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim }).then(({ items, source }) => {
       const wait = Math.max(0, 900 - (Date.now() - start))
       setTimeout(() => {
         if (!active) return

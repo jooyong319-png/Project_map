@@ -14,8 +14,14 @@ export default function RestaurantCard({ rank, data, selected, bookmarked, onOpe
           {data.region}{data.cat ? ` · ${data.cat}` : ''}{data.price ? ` · ${data.price}` : ''}
         </div>
         <div className="rating-row">
-          <span className="rating-pill">★ {Number(data.rating).toFixed(1)}</span>
-          <span className="reviews">리뷰 {Number(data.reviews).toLocaleString()}</span>
+          {data.rating > 0 ? (
+            <>
+              <span className="rating-pill">★ {Number(data.rating).toFixed(1)}</span>
+              <span className="reviews">리뷰 {Number(data.reviews).toLocaleString()}</span>
+            </>
+          ) : (
+            <span className="src-pill">{data.source === 'kakao' ? '카카오맵' : '정보'}</span>
+          )}
         </div>
       </div>
       <button

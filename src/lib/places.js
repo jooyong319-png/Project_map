@@ -1,26 +1,35 @@
 import { MOCK } from '../data/mockRestaurants'
 
+// 한국 영역인지(대략) — 한국은 카카오, 그 외는 구글을 쓴다(구글은 한국 맛집 데이터가 약함).
+function isKorea(lat, lng) {
+  return lng >= 124.5 && lng <= 131.5 && lat >= 33 && lat <= 39
+}
+
 // 맛집 데이터를 가져온다.
-// 1) /api/places (Google Places 프록시) 시도
-// 2) 실패하거나 키가 없으면 목 데이터로 폴백 (검색어로 로컬 필터링)
+// 1) 한국 영역(bbox) → /api/kakao (카카오 로컬), 그 외 → /api/places (구글)
+// 2) 카카오 키가 없으면(fallback) 구글로, 구글도 없으면 목 데이터로 폴백
 export async function getRestaurants(query = '', opts = {}) {
   const base = query.trim()
   const cat = opts.category && opts.category !== '전체' ? opts.category : ''
+  const bbox = opts.bbox
+  const useKakao = Array.isArray(bbox) && isKorea((bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2)
+  const endpoints = useKakao ? ['/api/kakao', '/api/places'] : ['/api/places']
   // 키워드/카테고리를 따로 보내고, 실제 검색어 변환은 서버에서(전 세계 통하게)
   try {
     const params = new URLSearchParams()
     if (base) params.set('q', base)
     if (cat) params.set('cat', cat)
-    if (opts.bbox) params.set('bbox', opts.bbox.join(','))
+    if (bbox) params.set('bbox', bbox.join(','))
     if (opts.global) params.set('global', '1') // 전세계 검색(지역 제한 없음)
     if (opts.openNow) params.set('open', '1') // 영업 중만 (구글 API openNow)
-    const res = await fetch(`/api/places?${params.toString()}`)
-    if (res.ok) {
+    if (useKakao && opts.limit) params.set('enrich', String(opts.limit)) // 카카오 결과를 구글로 보강할 개수
+    for (const ep of endpoints) {
+      const res = await fetch(`${ep}?${params.toString()}`)
+      if (!res.ok) continue
       const data = await res.json()
-      // 키가 있으면(=fallback 아님) 실제 결과를 그대로 반환. 0개면 빈 목록(목 데이터 안 씀).
-      if (!data.fallback) {
-        return { items: Array.isArray(data.places) ? data.places : [], source: 'google' }
-      }
+      if (data.fallback) continue // 키 없음 → 다음 소스로
+      const items = Array.isArray(data.places) ? data.places : []
+      return { items, source: items[0]?.source || 'google' }
     }
   } catch (_) {
     // 네트워크 오류 → 폴백

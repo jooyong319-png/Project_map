@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import placesHandler from './api/places.js'
 import photoHandler from './api/photo.js'
 import placeHandler from './api/place.js'
+import kakaoHandler from './api/kakao.js'
 
 // 로컬 개발용 /api 미들웨어 플러그인.
 // `npm run dev` 에서도 Vercel 함수(api/*.js)를 그대로 실행해
@@ -10,7 +11,7 @@ import placeHandler from './api/place.js'
 function apiPlugin(env) {
   // 서버 사이드 핸들러가 읽는 process.env 에 .env 값을 주입
   Object.assign(process.env, env)
-  const routes = { '/api/places': placesHandler, '/api/photo': photoHandler, '/api/place': placeHandler }
+  const routes = { '/api/places': placesHandler, '/api/photo': photoHandler, '/api/place': placeHandler, '/api/kakao': kakaoHandler }
   return {
     name: 'local-api',
     configureServer(server) {

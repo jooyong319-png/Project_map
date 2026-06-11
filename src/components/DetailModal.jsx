@@ -26,24 +26,29 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
   }, [data?.id])
 
   useEffect(() => {
-    if (!data?.id) return
+    // 구글 상세를 조회할 id: 구글 항목은 자기 id, 카카오는 매칭된 구글 id(gid). 매칭 없으면 생략.
+    const gid = data?.source === 'kakao' ? data?.gid : data?.id
+    if (!gid) { setDet(null); return }
     setDet(null)
     setLoading(true)
     let active = true
-    fetch(`/api/place?id=${encodeURIComponent(data.id)}`)
+    fetch(`/api/place?id=${encodeURIComponent(gid)}`)
       .then((r) => r.json())
       .then((d) => { if (active) { setDet(d && !d.error ? d : null); setLoading(false) } })
       .catch(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [data?.id])
+  }, [data?.id, data?.source, data?.gid])
 
   if (!data) return null
 
+  const isKakao = data.source === 'kakao'
   const photos = det?.photos?.length ? det.photos : (data.photo ? [data.photo] : [])
   const address = det?.address || data.region || ''
-  const phone = det?.phone
+  const phone = det?.phone || data.phone
   const website = det?.website
-  const mapsUrl = det?.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.name)}`
+  const mapsUrl = isKakao
+    ? (data.place_url || `https://map.kakao.com/?q=${encodeURIComponent(data.name)}`)
+    : (det?.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.name)}`)
 
   // 갤러리 마우스 드래그 스와이프
   const galDown = (e) => { const el = galRef.current; if (!el) return; drag.current = { down: true, x: e.clientX, left: el.scrollLeft }; try { el.setPointerCapture(e.pointerId) } catch (_) {} }
@@ -69,8 +74,11 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
       <div className="detail-head">
         <h2>{data.name}</h2>
         <div className="detail-cat">
-          {data.cat}{data.price ? ` · ${data.price}` : ''} · <span className="detail-star">★ {Number(data.rating).toFixed(1)}</span>
-          <span className="detail-rev"> ({Number(data.reviews).toLocaleString()})</span>
+          {data.cat}{data.price ? ` · ${data.price}` : ''}
+          {data.rating > 0 ? (
+            <> · <span className="detail-star">★ {Number(data.rating).toFixed(1)}</span>
+            <span className="detail-rev"> ({Number(data.reviews).toLocaleString()})</span></>
+          ) : isKakao ? <span className="detail-rev"> · 카카오맵</span> : null}
         </div>
       </div>
 
@@ -129,6 +137,11 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
               {det.hours.map((h, i) => <div key={i}>{h}</div>)}
             </div>
           </div>
+        )}
+        {isKakao && (
+          <a className="kakao-link" href={mapsUrl} target="_blank" rel="noreferrer">
+            카카오맵에서 사진·리뷰 보기 →
+          </a>
         )}
       </div>
 
