@@ -3,13 +3,13 @@
 // KAKAO_REST_KEY 가 없으면 fallback:true 를 반환해 프런트엔드가 구글로 폴백하게 합니다.
 // 카카오는 평점/리뷰/사진을 제공하지 않으므로 해당 필드는 비우고 place_url(카카오맵 링크)을 제공.
 
-const ICON_BY_CAT = { 한식: '🍲', 고기: '🍖', 횟집: '🐟', 면: '🍜', 카페: '☕', 기타: '🍽️' }
-const PALETTE = ['#f3a86b', '#9bcf8a', '#7cb6e8', '#e98f8f', '#c9a3e0', '#e0a35c', '#8fc8a0']
+export const ICON_BY_CAT = { 한식: '🍲', 고기: '🍖', 횟집: '🐟', 면: '🍜', 카페: '☕', 기타: '🍽️' }
+export const PALETTE = ['#f3a86b', '#9bcf8a', '#7cb6e8', '#e98f8f', '#c9a3e0', '#e0a35c', '#8fc8a0']
 
 const PRICE = { PRICE_LEVEL_INEXPENSIVE: '₩', PRICE_LEVEL_MODERATE: '₩₩', PRICE_LEVEL_EXPENSIVE: '₩₩₩', PRICE_LEVEL_VERY_EXPENSIVE: '₩₩₩₩' }
 
 // 카카오 category_name("음식점 > 한식 > 국밥") → 앱 카테고리
-function catFromKakao(name = '') {
+export function catFromKakao(name = '') {
   if (/카페|커피|디저트|베이커리|제과|빵/.test(name)) return '카페'
   if (/고기|육류|구이|삼겹|갈비|곱창|막창|족발|보쌈|닭/.test(name)) return '고기'
   if (/회|해물|수산|일식|초밥|스시|장어/.test(name)) return '횟집'
@@ -20,7 +20,7 @@ function catFromKakao(name = '') {
 
 // 카카오 가게를 구글에 이름+좌표로 매칭해 평점·리뷰·사진을 가져온다.
 // (구글 키 있을 때만, 좌표가 ~300m 내로 맞을 때만 채택)
-async function enrichWithGoogle(item, gkey) {
+export async function enrichWithGoogle(item, gkey) {
   try {
     const body = {
       textQuery: item.name,

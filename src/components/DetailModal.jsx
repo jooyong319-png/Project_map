@@ -80,6 +80,11 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
             <span className="detail-rev"> ({Number(data.reviews).toLocaleString()})</span></>
           ) : isKakao ? <span className="detail-rev"> · 카카오맵</span> : null}
         </div>
+        {data.tags?.length > 0 && (
+          <div className="detail-tags">
+            {data.tags.map((t) => <span key={t} className="tag-badge">🏅 {t}</span>)}
+          </div>
+        )}
       </div>
 
       <div className="detail-actions">

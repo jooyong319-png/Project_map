@@ -38,9 +38,9 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
     stateRef.current = st
 
     function resize() {
-      const rect = canvas.getBoundingClientRect()
-      const W = Math.max(1, rect.width)
-      const H = Math.max(1, rect.height)
+      // offsetWidth/Height 는 CSS transform(geofade scale) 영향을 안 받아 좌표가 안 틀어짐
+      const W = Math.max(1, canvas.offsetWidth || canvas.getBoundingClientRect().width)
+      const H = Math.max(1, canvas.offsetHeight || canvas.getBoundingClientRect().height)
       const dpr = window.devicePixelRatio || 1
       st.W = W; st.H = H
       canvas.width = Math.round(W * dpr)
@@ -130,7 +130,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
     st.draw = draw
 
     // 클릭/호버 인식 반경: 지구본 배율에 비례(축소될수록 작게)
-    function hitR() { return Math.max(12, Math.min(45, 24 * projection.scale() / st.fit)) }
+    function hitR() { return Math.max(6, Math.min(18, 9 * projection.scale() / st.fit)) }
 
     function handleTap(clientX, clientY) {
       const rect = canvas.getBoundingClientRect()
@@ -147,7 +147,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
         const c = COUNTRIES[i]
         if (geoDistance(c.center, center) >= Math.PI / 2) continue
         const p = projection(c.center); if (!p) continue
-        const d = (p[0] - mx) ** 2 + (p[1] - 8 - my) ** 2
+        const d = (p[0] - mx) ** 2 + (p[1] - my) ** 2
         if (d < bestD) { bestD = d; best = c }
       }
       const hr = hitR()
@@ -195,8 +195,10 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       const mx = clientX - rect.left, my = clientY - rect.top
       const R = projection.scale()
       const cx = st.W / 2, cy = st.H / 2
+      const overSphere = (mx - cx) ** 2 + (my - cy) ** 2 <= R * R
+      st.mouseOver = overSphere // 구체 위에 있으면 자전 멈춤(핀이 미끄러지지 않게)
       let idx = -1
-      if ((mx - cx) ** 2 + (my - cy) ** 2 <= R * R) {
+      if (overSphere) {
         const rot = projection.rotate()
         const center = [-rot[0], -rot[1]]
         const hr = hitR()
@@ -205,7 +207,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
           const c = COUNTRIES[i]
           if (geoDistance(c.center, center) >= Math.PI / 2) continue
           const p = projection(c.center); if (!p) continue
-          const d = (p[0] - mx) ** 2 + (p[1] - 8 - my) ** 2
+          const d = (p[0] - mx) ** 2 + (p[1] - my) ** 2
           if (d <= bestD) { bestD = d; idx = i }
         }
       }
@@ -213,7 +215,6 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
         st.hoverIdx = idx
         canvas.style.cursor = idx >= 0 ? 'pointer' : ''
       }
-      if (idx >= 0) st.lastInteract = st.now // 핀 조준 중엔 자전 멈춤
     }
     function onMove(e) {
       if (!st.pointers.has(e.pointerId)) { updateHover(e.clientX, e.clientY); return }
@@ -266,7 +267,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
       st.wheelT = setTimeout(() => { propsRef.current.onMoving && propsRef.current.onMoving(false) }, 220)
     }
 
-    function onLeave() { if (st.hoverIdx !== -1) { st.hoverIdx = -1; canvas.style.cursor = '' } }
+    function onLeave() { st.mouseOver = false; if (st.hoverIdx !== -1) { st.hoverIdx = -1; canvas.style.cursor = '' } }
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerleave', onLeave)
@@ -313,7 +314,7 @@ export default function Globe({ items, selected, onSelect, onCountryClick, onZoo
         } else {
           st.vx = st.vy = 0
           // 가만두면 천천히 자전 (여러 나라가 돌아가며 앞면에 보이게)
-          if (now - st.lastInteract > IDLE_MS && st.targetScale <= st.fit * 1.05 && !st.transitioned) {
+          if (now - st.lastInteract > IDLE_MS && st.targetScale <= st.fit * 1.05 && !st.transitioned && !st.mouseOver) {
             const r = projection.rotate()
             projection.rotate([r[0] + 0.06, r[1] + (st.homeLat - r[1]) * 0.01])
           }

@@ -5,6 +5,20 @@ function isKorea(lat, lng) {
   return lng >= 124.5 && lng <= 131.5 && lat >= 33 && lat <= 39
 }
 
+// 큐레이션(화제의 맛집) — 시드 목록을 카카오로 좌표 찾고 구글로 평점·사진 보강해 반환
+export async function getCuration(tag = '') {
+  try {
+    const params = new URLSearchParams()
+    if (tag) params.set('tag', tag)
+    const res = await fetch(`/api/curation?${params.toString()}`)
+    if (res.ok) {
+      const d = await res.json()
+      if (!d.fallback) return { items: Array.isArray(d.places) ? d.places : [], source: 'kakao' }
+    }
+  } catch (_) {}
+  return { items: [], source: 'mock' }
+}
+
 // 맛집 데이터를 가져온다.
 // 1) 한국 영역(bbox) → /api/kakao (카카오 로컬), 그 외 → /api/places (구글)
 // 2) 카카오 키가 없으면(fallback) 구글로, 구글도 없으면 목 데이터로 폴백

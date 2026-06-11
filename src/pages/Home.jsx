@@ -3,9 +3,18 @@ import FilterBar from '../components/FilterBar.jsx'
 import RestaurantList from '../components/RestaurantList.jsx'
 import GeoPanel from '../components/GeoPanel.jsx'
 import DetailModal from '../components/DetailModal.jsx'
-import { getRestaurants } from '../lib/places.js'
+import { getRestaurants, getCuration } from '../lib/places.js'
 import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
 import { COUNTRIES } from '../data/countries.js'
+
+// 좌표가 속한 나라(bbox 기준, 앞에서부터 먼저 매칭). 없으면 ''.
+function countryAt(lat, lng) {
+  for (const c of COUNTRIES) {
+    const [w, s, e, n] = c.bbox
+    if (lng >= w && lng <= e && lat >= s && lat <= n) return c.name
+  }
+  return ''
+}
 
 export default function Home() {
   const [query, setQuery] = useState('')
@@ -43,7 +52,10 @@ export default function Home() {
     let active = true
     setLoading(true)
     const start = Date.now()
-    getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim }).then(({ items, source }) => {
+    const fetcher = search.curation
+      ? getCuration()
+      : getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim })
+    fetcher.then(({ items, source }) => {
       const wait = Math.max(0, 900 - (Date.now() - start))
       setTimeout(() => {
         if (!active) return
@@ -88,6 +100,7 @@ export default function Home() {
   // 상황에 맞춰 바뀌는 리스트 제목
   const title = useMemo(() => {
     if (showingSaved) return { prefix: '⭐ 저장한 맛집', suffix: '' }
+    if (search.curation) return { prefix: '🏆 화제의 맛집', suffix: '' }
     if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' } // 키워드 검색
     return { prefix: '인기 맛집', suffix: `TOP ${search.lim}` }
   }, [showingSaved, search])
@@ -99,7 +112,12 @@ export default function Home() {
   }
   // 클릭: 선택 + 지도 포커스 + 상세 패널(왼쪽)
   const onPick = (d) => { setSelectedId(d.id); setOpenItem(d) }
-  const onBoundsChange = (b) => { mapBoundsRef.current = b }
+  const onBoundsChange = (b) => {
+    mapBoundsRef.current = b
+    // 지도 중심이 속한 나라로 나라 칩 자동 전환
+    const name = countryAt((b[1] + b[3]) / 2, (b[0] + b[2]) / 2)
+    if (name) setCountry((cur) => (cur === name ? cur : name))
+  }
 
   // 모바일 바텀시트: 핸들을 위/아래로 끌면 가까운 스냅 지점에 달라붙음
   const sheetY = (state, h) => (state === 'full' ? 0 : state === 'half' ? h * 0.5 : Math.max(0, h - 60))
@@ -151,6 +169,14 @@ export default function Home() {
     if (b) commitSearch(b, q)             // 지도: 현재 보고 있는 영역
     else { if (!q) return; commitSearch(null, q, true) } // 지구본: 전세계 검색
   }
+  // 🏆 화제의 맛집(큐레이션) 불러오기 — 어디서든
+  const loadCuration = () => {
+    triggerPeek()
+    setQuery('')
+    setBookmarkOnly(false)
+    setSearch((s) => ({ q: '', bbox: null, sort, lim: limit, tick: s.tick + 1, curation: true }))
+  }
+
   // 나라 칩 클릭 → 그 나라로 이동만 (검색은 안 함)
   const onCountry = (name) => {
     const c = COUNTRIES.find((x) => x.name === name)

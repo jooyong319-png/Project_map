@@ -9,7 +9,10 @@ export default function RestaurantCard({ rank, data, selected, bookmarked, onOpe
         <span className={`rank-badge ${medal}`}>{rank}</span>
       </div>
       <div className="info">
-        <div className="name">{data.name}</div>
+        <div className="name">
+          {data.name}
+          {data.tags?.length > 0 && <span className="tag-badge">🏅 {data.tags[0]}</span>}
+        </div>
         <div className="meta">
           {data.region}{data.cat ? ` · ${data.cat}` : ''}{data.price ? ` · ${data.price}` : ''}
         </div>
