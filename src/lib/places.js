@@ -55,7 +55,10 @@ export async function getRestaurants(query = '', opts = {}) {
     if (opts.global) params.set('global', '1') // 전세계 검색(지역 제한 없음)
     if (opts.openNow) params.set('open', '1') // 영업 중만 (구글 API openNow)
     if (opts.oldschool) params.set('oldschool', '1') // 노포(오래된 가게)만 — 카카오 한정
-    if (useKakao && opts.limit) params.set('enrich', String(opts.limit)) // 카카오 결과를 구글로 보강할 개수
+    if (useKakao && opts.limit) {
+      params.set('lim', String(opts.limit)) // 격자로 모을 목표 개수(50/100/200)
+      params.set('enrich', String(Math.min(opts.limit, 60))) // 구글 보강은 비용상 상위 60개로 제한
+    }
     for (const ep of endpoints) {
       const res = await fetch(`${ep}?${params.toString()}`)
       if (!res.ok) continue

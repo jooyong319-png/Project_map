@@ -54,10 +54,19 @@ export async function seedByIds(ids) {
 
 export async function seedUpsert(rows) {
   if (!rows?.length) return
+  // 한 요청에 같은 id 가 두 번 있으면 upsert 가 통째로 실패 → 중복 제거(뒤엣것 유지)
+  const dedup = new Map()
+  for (const r of rows) dedup.set(r.id, r)
+  rows = [...dedup.values()]
   if (usingSupabase()) {
-    await fetch(`${sbUrl()}/rest/v1/seed?on_conflict=id`, {
-      method: 'POST', headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }), body: JSON.stringify(rows),
-    })
+    // 100개씩 청크 업서트 + 에러 확인(조용한 실패 방지)
+    for (let i = 0; i < rows.length; i += 100) {
+      const chunk = rows.slice(i, i + 100)
+      const r = await fetch(`${sbUrl()}/rest/v1/seed?on_conflict=id`, {
+        method: 'POST', headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }), body: JSON.stringify(chunk),
+      })
+      if (!r.ok) throw new Error(`seedUpsert ${r.status}: ${(await r.text()).slice(0, 200)}`)
+    }
     return
   }
   const cur = fRead(SEED_PATH, [])

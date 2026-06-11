@@ -62,6 +62,44 @@ export async function enrichWithGoogle(item, gkey) {
   }
 }
 
+// 한 사각형(rect)에서 카카오 3페이지(최대 45) 수집.
+// full=true → 그 칸의 전체 매칭(total_count)이 45 초과 = 페이지로 못 가져오는 게 있음 → 쪼개야 함.
+async function fetchRect(base, params, rect, headers) {
+  const out = []
+  const seen = new Set()
+  let full = false
+  for (const page of [1, 2, 3]) {
+    const qs = new URLSearchParams({ ...params, rect, page: String(page) })
+    const r = await fetch(`${base}?${qs.toString()}`, { headers })
+    if (!r.ok) break
+    const d = await r.json()
+    if (page === 1 && (d.meta?.total_count || 0) > 45) full = true
+    for (const doc of d.documents || []) if (doc.id && !seen.has(doc.id)) { seen.add(doc.id); out.push(doc) }
+    if (d.meta?.is_end) break
+  }
+  return { docs: out, full }
+}
+
+// 적응형 4분할 격자 — 꽉 찬 칸만 더 쪼개 target 개까지 모은다(카카오 45 한계 우회).
+async function gridCollect(base, params, bbox, headers, target, maxDepth = 3) {
+  const all = new Map()
+  const [W, S, E, N] = bbox.split(',').map(Number)
+  async function rec(w, s, e, n, depth) {
+    if (all.size >= target) return
+    const { docs, full } = await fetchRect(base, params, `${w},${s},${e},${n}`, headers)
+    for (const doc of docs) all.set(doc.id, doc)
+    if (full && depth < maxDepth && all.size < target) {
+      const mx = (w + e) / 2, my = (s + n) / 2
+      await rec(w, s, mx, my, depth + 1)
+      await rec(mx, s, e, my, depth + 1)
+      await rec(w, my, mx, n, depth + 1)
+      await rec(mx, my, e, n, depth + 1)
+    }
+  }
+  await rec(W, S, E, N, 0)
+  return [...all.values()]
+}
+
 export default async function handler(req, res) {
   const key = process.env.KAKAO_REST_KEY
   if (!key) {
@@ -87,19 +125,26 @@ export default async function handler(req, res) {
   if (isKeyword) common.query = kw
 
   const headers = { Authorization: `KakaoAK ${key}` }
+  // 모을 목표 개수(격자). lim 으로 50/100/200 까지 진짜 채운다.
+  const target = Math.min(Math.max(parseInt(req.query?.lim, 10) || 45, 15), 200)
   try {
-    // 최대 3페이지(45곳)까지 병렬 수집
-    const pages = await Promise.all([1, 2, 3].map(async (page) => {
-      const qs = new URLSearchParams({ ...common, page: String(page) })
-      const r = await fetch(`${base}?${qs.toString()}`, { headers })
-      if (!r.ok) return []
-      const d = await r.json()
-      return d.documents || []
-    }))
-    const seen = new Set()
-    const raw = []
-    for (const doc of pages.flat()) {
-      if (doc.id && !seen.has(doc.id)) { seen.add(doc.id); raw.push(doc) }
+    let raw
+    if (rect) {
+      // 지역(bbox) 검색 → 적응형 격자로 target 개까지
+      const params = { category_group_code: 'FD6', size: '15' }
+      if (isKeyword) params.query = kw
+      raw = await gridCollect(base, params, rect, headers, target)
+    } else {
+      // 전세계 키워드(영역 없음) → 3페이지만
+      const pages = await Promise.all([1, 2, 3].map(async (page) => {
+        const qs = new URLSearchParams({ ...common, page: String(page) })
+        const r = await fetch(`${base}?${qs.toString()}`, { headers })
+        if (!r.ok) return []
+        return (await r.json()).documents || []
+      }))
+      const seen = new Set()
+      raw = []
+      for (const doc of pages.flat()) if (doc.id && !seen.has(doc.id)) { seen.add(doc.id); raw.push(doc) }
     }
     let places = raw.map((p, i) => {
       const c = catFromKakao(p.category_name)
@@ -134,7 +179,7 @@ export default async function handler(req, res) {
 
     // 구글 보강: 보여줄 상위 N개에 평점·리뷰·사진 채우기 (캐시 우선, 14일 지난 것만 재호출)
     const gkey = process.env.GOOGLE_PLACES_API_KEY
-    const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 45)
+    const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 60)
     if (gkey && enrichN > 0) places = await cachedEnrich(places, enrichN, (it) => enrichWithGoogle(it, gkey))
 
     res.status(200).json({ places })

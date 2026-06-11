@@ -128,6 +128,10 @@ header {
 .save-toggle svg path { fill: #d3d3d9; stroke: #bdbdc6; stroke-width: .5; transition: fill .15s; }
 .save-toggle:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .save-toggle.on { border-color: #f3c969; color: #b9821a; }
+/* 상단바 저장(아이콘만) — 검색/필터 버튼과 같은 높이의 동그란 토글 */
+.save-toggle.top { margin-left: 0; flex: 0 0 auto; padding: 9px 12px; }
+.save-toggle.top svg { width: 18px; height: 18px; }
+.save-toggle.top.on svg path { fill: #f3c969; stroke: #e0ab33; }
 .save-toggle.on svg path { fill: #f5a623; stroke: #e0931a; }
 
 .count { display: flex; align-items: center; gap: 8px; padding: 4px 24px 12px; font-size: 14px; color: var(--muted); max-width: 1200px; margin: 0 auto; }

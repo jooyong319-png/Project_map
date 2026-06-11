@@ -246,6 +246,15 @@ export default function Home() {
           <button type="submit" className="search-go">검색</button>
         </form>
         <button
+          className={`save-toggle top ${bookmarkOnly ? 'on' : ''}`}
+          onClick={() => setBookmarkOnly((o) => !o)}
+          title="저장한 곳만 보기"
+          aria-label="저장한 곳만 보기"
+          aria-pressed={bookmarkOnly}
+        >
+          <svg viewBox="0 0 24 24"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
+        </button>
+        <button
           className="filters-toggle"
           onClick={() => setFiltersOpen((o) => !o)}
           aria-expanded={filtersOpen}
@@ -269,15 +278,6 @@ export default function Home() {
             <option value={100}>100개</option>
             <option value={200}>200개</option>
           </select>
-          <button
-            className={`save-toggle ${bookmarkOnly ? 'on' : ''}`}
-            onClick={() => setBookmarkOnly((o) => !o)}
-            title="저장한 곳만 보기"
-            aria-label="저장한 곳만 보기"
-          >
-            <svg viewBox="0 0 24 24"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
-            저장
-          </button>
         </div>
         <FilterBar
           country={country} onCountry={onCountry}
