@@ -133,8 +133,12 @@ export default async function handler(req, res) {
     const key = process.env.GEMINI_API_KEY
     let course
     if (key) {
-      try { course = await geminiCourse(cand, key, theme) }
-      catch (_) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // AI 실패 → 자동 구성
+      // 일시적 실패(혼잡/타임아웃) 대비 최대 3회 재시도 후에만 휴리스틱 폴백
+      for (let i = 0; i < 3 && !course; i++) {
+        try { course = await geminiCourse(cand, key, theme) }
+        catch (_) { if (i < 2) await new Promise((r) => setTimeout(r, 400 * (i + 1))) }
+      }
+      if (!course) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // 3회 다 실패 → 자동 구성
     } else {
       course = heuristicCourse(cand)
     }
