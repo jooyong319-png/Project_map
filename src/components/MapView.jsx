@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, Marker, CircleMarker, Polyline, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import VectorBasemap from './VectorBasemap.jsx'
@@ -33,6 +33,35 @@ function makeIcon(d, i, animate = true) {
     iconAnchor: [11, 11],
     popupAnchor: [0, -11],
   })
+}
+
+// AI 코스 번호 핀 (종류별 색)
+const COURSE_COLOR = { food: '#f0792e', travel: '#2ea36b', stay: '#7c5cff' }
+function courseIcon(order, kind, active) {
+  const c = COURSE_COLOR[kind] || '#f0792e'
+  return L.divIcon({
+    className: 'mk-wrap',
+    html: `<div class="course-pin${active ? ' on' : ''}" style="background:${c}">${order}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 30],
+    popupAnchor: [0, -30],
+  })
+}
+
+// 코스가 정해지면 그 동선 전체가 보이게 영역 맞춤
+function FitCourse({ stops }) {
+  const map = useMap()
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!stops?.length) return
+    const key = stops.map((s) => s.id).join(',')
+    if (key === ref.current) return
+    ref.current = key
+    const pts = stops.map((s) => [s.lat, s.lng])
+    if (pts.length === 1) map.setView(pts[0], 15)
+    else map.fitBounds(pts, { padding: [70, 70], maxZoom: 16 })
+  }, [stops, map])
+  return null
 }
 
 const KR_CENTER = [36.2, 127.8] // 대한민국 중앙 부근
@@ -133,7 +162,9 @@ function FlyToRegion({ target }) {
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, kind = 'food', limit = 10, initialCenter, initialZoom }) {
+export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, kind = 'food', limit = 10, initialCenter, initialZoom, course }) {
+  const courseStops = course?.stops || []
+  const hasCourse = courseStops.length > 0
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
   const points = valid.map((d) => [d.lat, d.lng])
   const mapRef = useRef(null)
@@ -181,7 +212,29 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       <ZoomWatcher onZoomOut={onZoomOut} onZoom={setZoom} onBounds={onBounds} onMoving={onMoving} />
       <FlyToLoc loc={myLoc} />
       <FlyToRegion target={flyTarget} />
-      {selItem && (
+      <FitCourse stops={courseStops} />
+      {hasCourse && (
+        <>
+          <Polyline
+            positions={courseStops.map((s) => [s.lat, s.lng])}
+            pathOptions={{ color: '#f0792e', weight: 3, opacity: 0.7, dashArray: '6 8' }}
+          />
+          {courseStops.map((s) => (
+            <Marker
+              key={`c_${s.id}`}
+              position={[s.lat, s.lng]}
+              icon={courseIcon(s.order, s.kind, selected === s.id)}
+              eventHandlers={{ click: () => onSelect && onSelect(s) }}
+              zIndexOffset={1000}
+            >
+              <Tooltip direction="top" offset={[0, -28]}>
+                <b>{s.order}. {s.name}</b>
+              </Tooltip>
+            </Marker>
+          ))}
+        </>
+      )}
+      {selItem && !hasCourse && (
         <CircleMarker
           center={[selItem.lat, selItem.lng]}
           radius={16}
@@ -189,7 +242,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
         />
       )}
       {myLoc && <Marker position={myLoc} icon={LOC_ICON} interactive={false} keyboard={false} />}
-      {valid.map((d) => (
+      {!hasCourse && valid.map((d) => (
         <Marker
           key={d.id}
           position={[d.lat, d.lng]}

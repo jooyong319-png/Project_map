@@ -19,6 +19,16 @@ export async function getCuration(tag = '') {
   return { items: [], source: 'mock' }
 }
 
+// AI 코스 짜기 — 현재 지도 영역(bbox) + 테마(선택)로 하루 동선을 받아온다.
+export async function getCourse(bbox, theme = '') {
+  try {
+    const t = theme ? `&theme=${encodeURIComponent(theme)}` : ''
+    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}`)
+    if (res.ok) return (await res.json()).course || null
+  } catch (_) {}
+  return null
+}
+
 // 맛집 데이터를 가져온다.
 // 1) 한국 영역(bbox) → /api/kakao (카카오 로컬), 그 외 → /api/places (구글)
 // 2) 카카오 키가 없으면(fallback) 구글로, 구글도 없으면 목 데이터로 폴백

@@ -4,7 +4,9 @@ import FilterBar from '../components/FilterBar.jsx'
 import RestaurantList from '../components/RestaurantList.jsx'
 import GeoPanel from '../components/GeoPanel.jsx'
 import DetailModal from '../components/DetailModal.jsx'
-import { getRestaurants, getCuration } from '../lib/places.js'
+import CourseLauncher from '../components/CourseLauncher.jsx'
+import CoursePanel from '../components/CoursePanel.jsx'
+import { getRestaurants, getCuration, getCourse } from '../lib/places.js'
 import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
 import { COUNTRIES } from '../data/countries.js'
 import { kindOf } from '../data/kinds.js'
@@ -53,6 +55,10 @@ export default function Home() {
   const [navTo, setNavTo] = useState(null) // 나라 필터 검색 시 지도 이동 신호
   const [regionTarget, setRegionTarget] = useState(null) // 선택한 지역 {center,zoom} ('필터 적용' 시 이동+검색)
   const [pickedLabel, setPickedLabel] = useState('') // 주소검색으로 고른 지역 라벨
+  const [course, setCourse] = useState(null) // AI 코스(동선)
+  const [courseLoading, setCourseLoading] = useState(false)
+  const [courseLauncher, setCourseLauncher] = useState(false) // 지구본/어디서든 AI 코스 시작
+  const pendingCourseRef = useRef(null) // 지역 이동 후 도착하면 그 bbox 로 코스 생성
 
   // 데이터 로드 — 커밋된 검색(search)이 바뀔 때만. 진입(tick 0) 시엔 검색 안 하고 저장된 곳만 표시.
   // 최소 로딩 시간을 둬서 "검색 중" 표시가 살짝 보이게(천천히 검색되는 느낌).
@@ -120,11 +126,12 @@ export default function Home() {
 
   // 상황에 맞춰 바뀌는 리스트 제목
   const title = useMemo(() => {
+    if (course || courseLoading) return { prefix: '🧭 AI 추천 코스', suffix: '' }
     if (showingSaved) return { prefix: '⭐ 저장한 맛집', suffix: '' }
     if (search.curation) return { prefix: '🏆 화제의 맛집', suffix: '' }
     if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' } // 키워드 검색
     return { prefix: '인기 맛집', suffix: `TOP ${search.lim}` }
-  }, [showingSaved, search])
+  }, [showingSaved, search, course, courseLoading])
 
   const onBookmark = async (data) => {
     await toggleBookmark(data)
@@ -135,7 +142,13 @@ export default function Home() {
   const onPick = (d) => { setSelectedId(d.id); setOpenItem(d) }
   const onBoundsChange = (b) => {
     mapBoundsRef.current = b
-    // 지역 이동 후 도착하면(지도가 영역 보고) 그때 검색
+    // 지역 이동 후 도착하면(지도가 영역 보고) 그때 AI 코스 / 일반 검색
+    if (pendingCourseRef.current) {
+      const { bbox, theme } = pendingCourseRef.current
+      pendingCourseRef.current = null
+      onCourse(bbox, theme)
+      return
+    }
     if (pendingSearchRef.current) {
       const p = pendingSearchRef.current
       pendingSearchRef.current = null
@@ -199,6 +212,39 @@ export default function Home() {
     const px = sameKind ? price : (k === 'food' ? price : 0)
     setSearch((s) => ({ q: '', bbox, sort, lim: limit, price: px, tags: sameKind ? tags : [], kind: k, tick: s.tick + 1 }))
   }
+  // 🧭 AI 코스 짜기 — 현재 지도 영역 + 테마(선택)로 하루 동선 생성
+  const onCourse = async (bbox, theme = '') => {
+    setCourseLoading(true)
+    setCourse(null)
+    triggerPeek()
+    try {
+      const c = await getCourse(bbox, theme)
+      if (!c || !c.stops?.length) {
+        setCourse(null)
+        alert('이 지역엔 코스로 묶을 저장된 곳이 부족해요. 먼저 음식·관광지·숙소를 검색해 보세요 🙏')
+      } else {
+        setCourse(c)
+      }
+    } finally {
+      setCourseLoading(false)
+    }
+  }
+  const onClearCourse = () => { setCourse(null); setCourseLoading(false) }
+  // 런처에서 지역+테마 선택 → 그 동네로 날아가 도착하면 코스 생성(onBoundsChange 에서 트리거)
+  const launchCourse = (center, label, theme = '') => {
+    setCourseLauncher(false)
+    setCourse(null)
+    setPickedLabel(label || '')
+    const d = 0.02 // ≈2km 박스
+    pendingCourseRef.current = { bbox: [center[0] - d, center[1] - d, center[0] + d, center[1] + d], theme }
+    setNavTo({ center, zoom: 15 })
+  }
+  // 런처의 '지금 보고 있는 지역' → 현재 지도 영역으로 바로 코스
+  const onCourseHere = (theme = '') => {
+    setCourseLauncher(false)
+    if (mapBoundsRef.current) onCourse(mapBoundsRef.current, theme)
+  }
+
   // 검색바 자동완성: 타이핑하면 전국 가게를 카카오로 제안
   useEffect(() => {
     if (pickedRef.current) { pickedRef.current = false; setSuggests([]); return }
@@ -286,6 +332,8 @@ export default function Home() {
     setSearch({ q: '', bbox: null, sort: 'reviews', lim: 50, price: 0, tick: 0 })
     setSelectedId(null)
     setOpenItem(null)
+    setCourse(null)
+    setCourseLoading(false)
     mapBoundsRef.current = null
   }
 
@@ -316,6 +364,17 @@ export default function Home() {
         </div>
       )}
     </form>
+      <div className="hdr-ai-wrap">
+        <button
+          className={`hdr-ai ${courseLauncher ? 'on' : ''}`}
+          onClick={() => setCourseLauncher((o) => !o)}
+          aria-expanded={courseLauncher}
+          title="AI 코스 짜기"
+        >
+          🧭 <span className="hdr-ai-label">AI 코스</span>
+        </button>
+        {courseLauncher && <CourseLauncher onLaunch={launchCourse} onUseCurrent={onCourseHere} hasCurrent={!!mapBoundsRef.current} onClose={() => setCourseLauncher(false)} />}
+      </div>
       <button
         className={`hdr-filter ${filtersOpen ? 'on' : ''}`}
         onClick={() => setFiltersOpen((o) => !o)}
@@ -387,22 +446,34 @@ export default function Home() {
           >
             <span className="sheet-grip" />
           </div>
-          <RestaurantList
-            items={visible}
-            selected={selectedId}
-            bookmarks={bookmarks}
-            loading={loading}
-            onOpen={onPick}
-            onBookmark={onBookmark}
-            emptyText={
-              showingSaved
-                ? '저장한 곳이 없어요 🔖'
-                : `이 지역에 표시할 ${({ all: '장소', food: '맛집', travel: '여행지', stay: '숙소' })[kind] || '장소'}이 없어요 🥲`
-            }
-          />
-          <div className="results-foot">평점·리뷰 수는 Google Places API 기준입니다.</div>
+          {(course || courseLoading) ? (
+            <CoursePanel
+              course={course}
+              loading={courseLoading}
+              selected={selectedId}
+              onSelectStop={onPick}
+              onClose={onClearCourse}
+            />
+          ) : (
+            <>
+              <RestaurantList
+                items={visible}
+                selected={selectedId}
+                bookmarks={bookmarks}
+                loading={loading}
+                onOpen={onPick}
+                onBookmark={onBookmark}
+                emptyText={
+                  showingSaved
+                    ? '저장한 곳이 없어요 🔖'
+                    : `이 지역에 표시할 ${({ all: '장소', food: '맛집', travel: '여행지', stay: '숙소' })[kind] || '장소'}이 없어요 🥲`
+                }
+              />
+              <div className="results-foot">평점·리뷰 수는 Google Places API 기준입니다.</div>
+            </>
+          )}
         </div>
-        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onReset={onReset} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} kind={kind} />
+        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onReset={onReset} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} kind={kind} course={course} courseLoading={courseLoading} onCourse={onCourse} onClearCourse={onClearCourse} />
         <DetailModal data={openItem} onClose={() => setOpenItem(null)} onBookmark={onBookmark} bookmarked={openItem ? bookmarks.includes(openItem.id) : false} sheet="half" />
       </div>
     </>
