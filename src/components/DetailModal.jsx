@@ -15,9 +15,10 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
   const [det, setDet] = useState(null)
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState('')
+  const [lightbox, setLightbox] = useState(null) // 확대해서 볼 이미지 src
   // 갤러리 드래그용 ref (반드시 early-return 위에서 호출 — Hooks 규칙)
   const galRef = useRef(null)
-  const drag = useRef({ down: false, x: 0, left: 0 })
+  const drag = useRef({ down: false, x: 0, left: 0, moved: false })
   const [enter, setEnter] = useState(true) // 진입 시 아래에서 슬라이드 업
 
   useEffect(() => {
@@ -53,9 +54,16 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
     : (det?.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.name)}`)
 
   // 갤러리 마우스 드래그 스와이프
-  const galDown = (e) => { const el = galRef.current; if (!el) return; drag.current = { down: true, x: e.clientX, left: el.scrollLeft }; try { el.setPointerCapture(e.pointerId) } catch (_) {} }
-  const galMove = (e) => { if (!drag.current.down || !galRef.current) return; galRef.current.scrollLeft = drag.current.left - (e.clientX - drag.current.x) }
-  const galUp = () => { drag.current.down = false }
+  const galDown = (e) => { const el = galRef.current; if (!el) return; drag.current = { down: true, x: e.clientX, left: el.scrollLeft, moved: false, target: e.target }; try { el.setPointerCapture(e.pointerId) } catch (_) {} }
+  const galMove = (e) => { if (!drag.current.down || !galRef.current) return; if (Math.abs(e.clientX - drag.current.x) > 4) drag.current.moved = true; galRef.current.scrollLeft = drag.current.left - (e.clientX - drag.current.x) }
+  // 탭(드래그 아님)으로 이미지를 누르면 확대 — setPointerCapture 가 click 을 막으므로 pointerup 에서 판정
+  const galUp = () => {
+    if (drag.current.down && !drag.current.moved) {
+      const t = drag.current.target
+      if (t && t.tagName === 'IMG' && t.dataset.idx != null) setLightbox(Number(t.dataset.idx))
+    }
+    drag.current.down = false
+  }
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 1800) }
   const share = async () => {
@@ -70,9 +78,11 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
   }
 
   return (
+    <>
     <div className={`detail-panel sheet-${sheet} ${enter ? 'sheet-enter' : ''}`}>
       <button className="detail-close" onClick={onClose} aria-label="닫기">×</button>
 
+      <div className="detail-scroll">
       <div className="detail-head">
         <h2>{data.name}</h2>
         <div className="detail-cat">
@@ -122,7 +132,8 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
           onPointerCancel={galUp}
         >
           {photos.map((src, i) => (
-            <img key={i} src={src} alt="" loading="lazy" draggable={false} onError={(e) => { e.currentTarget.style.display = 'none' }} />
+            <img key={i} src={src} alt="" loading="lazy" draggable={false} data-idx={i}
+              onError={(e) => { e.currentTarget.style.display = 'none' }} />
           ))}
         </div>
       )}
@@ -152,8 +163,66 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
           </a>
         )}
       </div>
+      </div>
 
       {toast && <div className="detail-toast">{toast}</div>}
+    </div>
+    {lightbox != null && (
+      <Lightbox photos={photos} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />
+    )}
+    </>
+  )
+}
+
+// 이미지 확대 보기 — 양쪽 화살표/키보드로 이전·다음, 탭하면 확대(줌) 토글, 확대 시 드래그로 이동
+const ZOOM = 2.4
+function Lightbox({ photos, index, onIndex, onClose }) {
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const drag = useRef({ down: false, x: 0, y: 0, px: 0, py: 0, moved: false })
+  const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }) }
+  // 넘길 땐 확대 배율은 유지, 위치만 가운데로
+  const go = (d) => { const n = index + d; if (n >= 0 && n < photos.length) { onIndex(n); setPan({ x: 0, y: 0 }) } }
+  useEffect(() => { setPan({ x: 0, y: 0 }) }, [index])
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft') go(-1)
+      else if (e.key === 'ArrowRight') go(1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+  const down = (e) => { drag.current = { down: true, x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, moved: false }; if (zoom > 1) setDragging(true); try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {} }
+  const move = (e) => {
+    const dr = drag.current; if (!dr.down) return
+    const dx = e.clientX - dr.x, dy = e.clientY - dr.y
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dr.moved = true
+    if (zoom > 1) setPan({ x: dr.px + dx, y: dr.py + dy })
+  }
+  const up = () => {
+    const dr = drag.current; if (!dr.down) return
+    dr.down = false; setDragging(false)
+    if (!dr.moved) { if (zoom > 1) reset(); else setZoom(ZOOM) } // 탭 → 확대/축소 토글
+  }
+  return (
+    <div className="lightbox" onClick={onClose}>
+      <button className="lightbox-close" onClick={onClose} aria-label="닫기">×</button>
+      {index > 0 && (
+        <button className="lightbox-nav prev" onClick={(e) => { e.stopPropagation(); go(-1) }} aria-label="이전">‹</button>
+      )}
+      <img
+        src={photos[index]} alt="" draggable={false}
+        className={`lightbox-img ${zoom > 1 ? 'zoomed' : ''}`}
+        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transition: dragging ? 'none' : 'transform .18s ease' }}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+      />
+      {index < photos.length - 1 && (
+        <button className="lightbox-nav next" onClick={(e) => { e.stopPropagation(); go(1) }} aria-label="다음">›</button>
+      )}
+      {photos.length > 1 && <div className="lightbox-count">{index + 1} / {photos.length}</div>}
     </div>
   )
 }

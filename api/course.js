@@ -40,6 +40,17 @@ async function gatherCandidates(bbox) {
   return out
 }
 
+// POST 바디 읽기 (Vercel=req.body 파싱됨 / 로컬 vite=스트림 직접 읽기)
+async function readBody(req) {
+  if (req.body) return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body
+  return await new Promise((resolve) => {
+    let data = ''
+    req.on('data', (c) => { data += c })
+    req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch { resolve({}) } })
+    req.on('error', () => resolve({}))
+  })
+}
+
 // 키 없을 때 폴백: 블로그수 상위로 뽑고 최근접 순서로 묶는다
 function heuristicCourse(cand) {
   const stay = cand.stay[0]
@@ -57,21 +68,24 @@ function heuristicCourse(cand) {
   return { title: '하루 추천 코스', summary: `이 지역 인기 ${stops.length}곳을 가까운 순서로 묶었어요.`, stops, by: 'auto' }
 }
 
-// Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=사용자 희망 테마(선택).
-async function geminiCourse(cand, key, theme) {
+// Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, cluster=흩어진 후보를 가까운 것끼리.
+async function geminiCourse(cand, key, theme, cluster = false) {
   const byId = new Map()
   const flat = []
   for (const k of ['stay', 'food', 'travel']) {
     for (const p of cand[k]) {
       byId.set(p.id, p)
-      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', tags: p.tags || [], blog: p.blog || 0 })
+      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', tags: p.tags || [], blog: p.blog || 0, fav: !!p.fav })
     }
   }
+  const hasFav = flat.some((f) => f.fav)
   const th = (theme || '').trim()
   const prompt = [
     '너는 한국 여행 동선을 짜는 큐레이터야. 아래 "후보" 목록(JSON)에서만 골라서 하루 코스를 만들어.',
     '규칙:',
     '- 후보에 있는 id 만 사용 (목록에 없는 곳은 절대 만들지 마).',
+    cluster ? '- 후보가 여러 지역에 흩어져 있을 수 있어. region 을 보고 "하루에 다닐 수 있는 가까운 곳들"로만 골라(멀리 떨어진 곳은 제외).' : '',
+    hasFav ? '- fav:true 는 사용자가 즐겨찾기한 곳이야. 동선에 맞으면 적극적으로 우선 포함해줘.' : '',
     '- 숙소(kind=stay)가 있으면 1곳을 베이스캠프로 맨 처음에 넣어. 없으면 생략.',
     '- 맛집(kind=food) 2~3곳, 관광지(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→저녁 느낌).',
     '- blog(블로그 언급수)와 tags 를 인기/특징 근거로 참고해.',
@@ -170,12 +184,48 @@ async function buildLegs(stops, kkey, okey) {
   }))
 }
 
+// 좌표 배열 파싱 (문자열 "w,s,e,n" → [.. ] 또는 null)
+function parseBbox(v) {
+  const a = (v || '').toString().split(',').map(Number)
+  return a.length === 4 && a.every(Number.isFinite) ? a : null
+}
+
 export default async function handler(req, res) {
-  const bbox = (req.query?.bbox || '').toString().split(',').map(Number)
-  if (bbox.length !== 4 || !bbox.every(Number.isFinite)) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
-  const theme = (req.query?.theme || '').toString().slice(0, 80)
+  let theme = (req.query?.theme || '').toString().slice(0, 80)
+  let bbox = parseBbox(req.query?.bbox)
+  let favs = []
   try {
-    const cand = await gatherCandidates(bbox)
+    // POST = 즐겨찾기 참고. body 에 bbox(선택)+candidates(저장목록)
+    if (req.method === 'POST') {
+      const b = await readBody(req)
+      theme = (b.theme || theme || '').toString().slice(0, 80)
+      bbox = bbox || parseBbox(b.bbox)
+      favs = (Array.isArray(b.candidates) ? b.candidates : []).filter((p) => p?.lat != null && p?.lng != null).slice(0, 60)
+    }
+    if (!bbox && !favs.length) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
+
+    // 지역 seed 후보
+    let cand = bbox ? await gatherCandidates(bbox) : { food: [], travel: [], stay: [] }
+
+    // 즐겨찾기 합치기: bbox 있으면 그 주변(±0.05°≈5km)만, 없으면 전부. 중복은 fav 표시만.
+    let cluster = false
+    if (favs.length) {
+      const idx = new Map()
+      for (const k of ['food', 'travel', 'stay']) for (const it of cand[k]) idx.set(it.id, it)
+      const pad = 0.05
+      const within = bbox ? (p) => p.lng >= bbox[0] - pad && p.lng <= bbox[2] + pad && p.lat >= bbox[1] - pad && p.lat <= bbox[3] + pad : () => true
+      let added = 0
+      for (const p of favs) {
+        if (!within(p)) continue
+        const ex = idx.get(p.id)
+        if (ex) { ex.fav = true; continue }
+        const k = ['food', 'travel', 'stay'].includes(p.kind) ? p.kind : 'food'
+        const it = { ...p, fav: true }
+        cand[k].push(it); idx.set(p.id, it); added++
+      }
+      cluster = true // 즐겨찾기 기반 → 흩어진 후보를 가까운 것끼리 묶게(근처 seed 포함)
+    }
+
     const total = cand.food.length + cand.travel.length + cand.stay.length
     if (total < 2) { res.status(200).json({ course: null, reason: 'empty' }); return }
     const key = process.env.GEMINI_API_KEY
@@ -183,7 +233,7 @@ export default async function handler(req, res) {
     if (key) {
       // 일시적 실패(혼잡/타임아웃) 대비 최대 3회 재시도 후에만 휴리스틱 폴백
       for (let i = 0; i < 3 && !course; i++) {
-        try { course = await geminiCourse(cand, key, theme) }
+        try { course = await geminiCourse(cand, key, theme, cluster) }
         catch (_) { if (i < 2) await new Promise((r) => setTimeout(r, 400 * (i + 1))) }
       }
       if (!course) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // 3회 다 실패 → 자동 구성

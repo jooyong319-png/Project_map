@@ -8,7 +8,7 @@ import CourseLauncher from '../components/CourseLauncher.jsx'
 import CoursePanel from '../components/CoursePanel.jsx'
 import { getRestaurants, getCuration, getCourse } from '../lib/places.js'
 import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
-import { COUNTRIES } from '../data/countries.js'
+import { COUNTRIES, PRICE_LABEL } from '../data/countries.js'
 import { kindOf } from '../data/kinds.js'
 
 const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
@@ -20,6 +20,7 @@ export default function Home() {
   const [query, setQuery] = useState('')
   const [suggests, setSuggests] = useState([]) // 검색바 자동완성(가게)
   const pickedRef = useRef(false) // 자동완성 선택 직후 재조회 방지
+  const suppressSuggestRef = useRef(false) // 검색 직후 디바운스 타이머가 자동완성 다시 띄우는 것 방지
   const [sort, setSort] = useState('reviews')
   const [limit, setLimit] = useState(50) // 보여줄 개수 50/100/200
   const [items, setItems] = useState([])
@@ -78,6 +79,11 @@ export default function Home() {
         setItems(items)
         setSource(source)
         setLoading(false)
+        // 전국 텍스트 검색은 지도가 결과 위치로 따라가게 (안 그러면 지도는 딴 데 머물러 마커가 안 보임)
+        if (search.global && items.length) {
+          const hit = items.find((i) => Number.isFinite(i.lng) && Number.isFinite(i.lat))
+          if (hit) setNavTo({ center: [hit.lng, hit.lat], zoom: 14 })
+        }
       }, wait)
     })
     return () => { active = false }
@@ -96,6 +102,9 @@ export default function Home() {
     getBookmarks().then(setBookmarks)
     getSavedItems().then(setSavedItems)
   }, [])
+
+  // 코스가 뜨면 모바일 바텀시트를 중간 크기로 (지도+코스 같이 보이게)
+  useEffect(() => { if (course || courseLoading) setSheet('half') }, [course, courseLoading])
 
   // 리스트 시트 첫 진입 슬라이드 업
   useEffect(() => {
@@ -125,13 +134,19 @@ export default function Home() {
     return [...byId.values()].map((d) => (savedIds.has(d.id) ? { ...d, saved: true } : d))
   }, [visible, savedItems])
 
-  // 상황에 맞춰 바뀌는 리스트 제목
+  // 상황에 맞춰 바뀌는 리스트 제목 (종류별 명칭 + 적용 필터 요약)
   const title = useMemo(() => {
+    const noun = { all: '장소', food: '맛집', travel: '관광지', stay: '숙소' }
     if (course || courseLoading) return { prefix: '🧭 AI 추천 코스', suffix: '' }
-    if (showingSaved) return { prefix: '⭐ 저장한 맛집', suffix: '' }
+    if (showingSaved) return { prefix: '⭐ 저장한 곳', suffix: '' }
     if (search.curation) return { prefix: '🏆 화제의 맛집', suffix: '' }
     if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' } // 키워드 검색
-    return { prefix: '인기 맛집', suffix: `TOP ${search.lim}` }
+    // 기본(지역 검색): 종류 N곳 + 무슨 필터가 적용됐는지
+    const f = []
+    if (search.kind !== 'all') f.push(search.sort === 'rating' ? '평점 높은순' : '리뷰 많은순') // 전체는 정렬 안 함
+    if (search.tags?.length) f.push(search.tags.join('·'))
+    if (search.price) f.push(PRICE_LABEL[search.price])
+    return { prefix: noun[search.kind] || '장소', suffix: `${search.lim}곳`, meta: f.join(' · ') }
   }, [showingSaved, search, course, courseLoading])
 
   const onBookmark = async (data) => {
@@ -145,9 +160,9 @@ export default function Home() {
     mapBoundsRef.current = b
     // 지역 이동 후 도착하면(지도가 영역 보고) 그때 AI 코스 / 일반 검색
     if (pendingCourseRef.current) {
-      const { bbox, theme } = pendingCourseRef.current
+      const { bbox, theme, candidates } = pendingCourseRef.current
       pendingCourseRef.current = null
-      onCourse(bbox, theme)
+      onCourse(bbox, theme, candidates)
       return
     }
     if (pendingSearchRef.current) {
@@ -213,25 +228,43 @@ export default function Home() {
     const px = sameKind ? price : (k === 'food' ? price : 0)
     setSearch((s) => ({ q: '', bbox, sort, lim: limit, price: px, tags: sameKind ? tags : [], kind: k, tick: s.tick + 1 }))
   }
-  // 🧭 AI 코스 짜기 — 현재 지도 영역 + 테마(선택)로 하루 동선 생성
-  const onCourse = async (bbox, theme = '') => {
+  // 즐겨찾기를 코스 후보 형태로 정규화 (좌표 있는 것만)
+  const favCandidates = () => savedItems
+    .filter((d) => d.lat != null && d.lng != null)
+    .map((d) => ({ id: d.id, name: d.name, kind: d.kind || 'food', region: d.region || '', tags: d.tags || [], blog: d.blog || 0, lat: d.lat, lng: d.lng }))
+
+  // 🧭 AI 코스 짜기 — 지역 + 테마(선택) + 즐겨찾기 참고(선택)
+  const onCourse = async (bbox, theme = '', candidates = null) => {
     setCourseLoading(true)
     setCourse(null)
-    setSheet('full') // 모바일: 코스 결과가 바로 보이게 시트 끝까지 올림
+    setSheet('half') // 모바일: 지도+코스 같이 보이는 중간 크기로
     try {
-      const c = await getCourse(bbox, theme)
+      const c = await getCourse(bbox, theme, candidates)
       if (!c || !c.stops?.length) {
         setCourse(null)
         alert('이 지역엔 코스로 묶을 저장된 곳이 부족해요. 먼저 음식·관광지·숙소를 검색해 보세요 🙏')
-      } else {
-        setCourse(c)
+        return null
       }
+      setCourse(c)
+      return c
     } finally {
       setCourseLoading(false)
     }
   }
+  // '즐겨찾기로' — 저장한 곳들만으로 코스(근처 seed 안 넣음). AI가 가까운 것끼리 묶고 지도도 그 묶음으로 이동.
+  const onCourseFav = async (theme = '') => {
+    setCourseLauncher(false)
+    const cand = favCandidates()
+    if (cand.length < 2) { alert('즐겨찾기로 코스를 만들려면 저장한 곳이 2곳 이상 필요해요 ⭐'); return }
+    const c = await onCourse(null, theme, cand) // bbox 없음 → 즐겨찾기만
+    if (c?.stops?.length) {
+      const sx = c.stops.map((s) => s.lng), sy = c.stops.map((s) => s.lat)
+      const center = [sx.reduce((a, b) => a + b, 0) / sx.length, sy.reduce((a, b) => a + b, 0) / sy.length]
+      setNavTo({ center, zoom: 13 }) // 코스 묶음으로 지도 이동
+    }
+  }
   const onClearCourse = () => { setCourse(null); setCourseLoading(false) }
-  // 런처에서 지역+테마 선택 → 그 동네로 날아가 도착하면 코스 생성(onBoundsChange 에서 트리거)
+  // [기본 모드] 런처에서 지역+테마 선택 → 그 동네로 날아가 도착하면 코스 생성(onBoundsChange 에서 트리거)
   const launchCourse = (center, label, theme = '') => {
     setCourseLauncher(false)
     setCourse(null)
@@ -240,7 +273,7 @@ export default function Home() {
     pendingCourseRef.current = { bbox: [center[0] - d, center[1] - d, center[0] + d, center[1] + d], theme }
     setNavTo({ center, zoom: 15 })
   }
-  // 런처의 '지금 보고 있는 지역' → 현재 지도 영역으로 바로 코스
+  // [지금 보고 있는 지역] 현재 지도 영역으로 바로 코스
   const onCourseHere = (theme = '') => {
     setCourseLauncher(false)
     if (mapBoundsRef.current) onCourse(mapBoundsRef.current, theme)
@@ -249,15 +282,17 @@ export default function Home() {
   // 검색바 자동완성: 타이핑하면 전국 가게를 카카오로 제안
   useEffect(() => {
     if (pickedRef.current) { pickedRef.current = false; setSuggests([]); return }
+    suppressSuggestRef.current = false // 새로 타이핑하면 자동완성 다시 허용
     const q = query.trim()
     if (q.length < 1) { setSuggests([]); return }
     const t = setTimeout(async () => {
+      if (suppressSuggestRef.current) return // 검색 눌렀으면 결과를 안 띄움
       try {
         const b = mapBoundsRef.current
         const bb = Array.isArray(b) ? `&bbox=${b.join(',')}` : ''
         const r = await fetch(`/api/suggest?q=${encodeURIComponent(q)}&kind=${kind}${bb}`)
         const d = await r.json()
-        setSuggests(Array.isArray(d.results) ? d.results : [])
+        if (!suppressSuggestRef.current) setSuggests(Array.isArray(d.results) ? d.results : [])
       } catch (_) { setSuggests([]) }
     }, 220)
     return () => clearTimeout(t)
@@ -277,8 +312,9 @@ export default function Home() {
   // (특정 가게로 바로 가고 싶으면 자동완성에서 클릭하면 됨)
   const runTextSearch = () => {
     const q = query.trim()
-    if (!q) { const b = mapBoundsRef.current; if (b) commitSearch(b, '') ; return } // 빈 검색 → 현재 영역
+    suppressSuggestRef.current = true // 검색 후 자동완성(미리보기) 안 뜨게
     setSuggests([])
+    if (!q) { const b = mapBoundsRef.current; if (b) commitSearch(b, '') ; return } // 빈 검색 → 현재 영역
     commitSearch(null, q, true) // 전국 구글 검색 → 리스트
   }
   // 필터 패널의 '필터 적용' → 선택 지역으로 이동 + 그 지역에서 검색 + 패널 닫기
@@ -398,7 +434,9 @@ export default function Home() {
         <CourseLauncher
           onLaunch={launchCourse}
           onUseCurrent={onCourseHere}
+          onUseFav={onCourseFav}
           hasCurrent={!!mapBoundsRef.current && mapZoom >= 12}
+          favCount={savedItems.filter((d) => d.lat != null && d.lng != null).length}
           onClose={() => setCourseLauncher(false)}
         />
       )}
@@ -422,12 +460,17 @@ export default function Home() {
         />
         </div>
         <div className="filter-apply-wrap">
-          <button className="filter-apply" onClick={applyFilters}>필터 적용</button>
+          <button className="filter-apply" onClick={applyFilters} disabled={!regionTarget}>
+            {regionTarget ? '필터 적용' : '지역을 먼저 선택하세요'}
+          </button>
         </div>
       </div>
 
       <div className="count">
-        <span>{title.prefix}{title.suffix && <> <b>{title.suffix}</b></>}</span>
+        <span className="count-title">
+          {title.prefix}{title.suffix && <> <b>{title.suffix}</b></>}
+          {title.meta && <span className="count-meta">{title.meta}</span>}
+        </span>
         {source === 'mock' && !showingSaved && <span className="badge-mock">샘플 데이터</span>}
         <div className="count-actions">
           <button

@@ -19,9 +19,18 @@ export async function getCuration(tag = '') {
   return { items: [], source: 'mock' }
 }
 
-// AI 코스 짜기 — 현재 지도 영역(bbox) + 테마(선택)로 하루 동선을 받아온다.
-export async function getCourse(bbox, theme = '') {
+// AI 코스 짜기 — 지도 영역(bbox)+테마, 또는 즐겨찾기 후보(candidates)로 하루 동선을 받아온다.
+export async function getCourse(bbox, theme = '', candidates = null) {
   try {
+    if (candidates) {
+      // 즐겨찾기 참고 → POST 로 지역 bbox + 저장목록 함께 전달
+      const res = await fetch('/api/course', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bbox: bbox || null, candidates, theme }),
+      })
+      if (res.ok) return (await res.json()).course || null
+      return null
+    }
     const t = theme ? `&theme=${encodeURIComponent(theme)}` : ''
     const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}`)
     if (res.ok) return (await res.json()).course || null
