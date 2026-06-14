@@ -3,6 +3,7 @@ import { MapContainer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } fro
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import VectorBasemap from './VectorBasemap.jsx'
+import { KINDS } from '../data/kinds.js'
 
 const AREA_MIN_ZOOM = 12 // 이보다 멀면(축소) 검색 비활성 — 동네 단위로 확대해야 검색
 
@@ -132,7 +133,7 @@ function FlyToRegion({ target }) {
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, limit = 10, initialCenter, initialZoom }) {
+export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, kind = 'food', limit = 10, initialCenter, initialZoom }) {
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
   const points = valid.map((d) => [d.lat, d.lng])
   const mapRef = useRef(null)
@@ -153,12 +154,12 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
   }, [items])
   const selItem = valid.find((d) => d.id === selected)
 
-  // 지금 보고 있는 지도 영역(bbox)으로 TOP 10 재검색
-  const searchHere = () => {
+  // 지금 보고 있는 지도 영역(bbox)으로 그 카테고리 재검색
+  const searchHere = (k) => {
     const map = mapRef.current
     if (!map || !onSearchArea) return
     const b = map.getBounds()
-    onSearchArea([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()])
+    onSearchArea([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], k)
   }
 
 
@@ -205,12 +206,24 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
     </MapContainer>
     {onSearchArea && (
       canSearch ? (
-        <button className="area-search" onClick={searchHere} disabled={searching}>
-          {searching ? <><span className="spin" />검색 중…</> : `📍 이 지역에서 TOP ${limit} 보기`}
-        </button>
+        <div className="area-search-wrap">
+          <div className="area-bubble">{searching ? '검색 중…' : '📍 이 지역에서 찾기'}</div>
+          <div className="area-search-seg">
+            {KINDS.map((k) => (
+              <button
+                key={k.key}
+                className={`area-seg-btn ${kind === k.key ? 'on' : ''}`}
+                onClick={() => searchHere(k.key)}
+                disabled={searching}
+              >
+                <span className="area-seg-ic">{k.icon}</span>{k.label}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="area-search hint">
-          🔍 더 확대하면 이 지역 TOP {limit}을 볼 수 있어요
+          🔍 더 확대하면 이 지역의 음식·여행지·숙소를 볼 수 있어요
         </div>
       )
     )}

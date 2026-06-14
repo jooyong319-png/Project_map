@@ -27,12 +27,14 @@ export async function getRestaurants(query = '', opts = {}) {
   const cat = opts.category && opts.category !== '전체' ? opts.category : ''
   const bbox = opts.bbox
   const tags = Array.isArray(opts.tags) ? opts.tags.filter(Boolean) : []
+  const kind = opts.kind || 'food'
 
-  // 태그 필터(맛집/노포/혼밥) 선택 시 → 저장된 시드에서 검색
+  // 태그 필터 선택 시 → 저장된 시드에서 검색
   if (tags.length) {
     try {
       const p = new URLSearchParams()
       p.set('tags', tags.join(','))
+      p.set('kind', kind)
       if (bbox) p.set('bbox', bbox.join(','))
       if (opts.limit) p.set('enrich', String(opts.limit))
       const res = await fetch(`/api/seed?${p.toString()}`)
@@ -51,6 +53,7 @@ export async function getRestaurants(query = '', opts = {}) {
     const params = new URLSearchParams()
     if (base) params.set('q', base)
     if (cat) params.set('cat', cat)
+    if (kind && kind !== 'food') params.set('kind', kind)
     if (bbox) params.set('bbox', bbox.join(','))
     if (opts.global) params.set('global', '1') // 전세계 검색(지역 제한 없음)
     if (opts.openNow) params.set('open', '1') // 영업 중만 (구글 API openNow)

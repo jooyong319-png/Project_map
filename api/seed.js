@@ -6,8 +6,8 @@
 //    (구글 ToS: 평점/사진 등은 최대 30일 캐시 허용. 좌표/태그는 우리 판정이라 영구 저장.)
 // ⚠️ 파일 쓰기는 로컬(dev)에서만 — Vercel prod 는 읽기전용이라 매번 라이브로 폴백.
 
-import { enrichWithGoogle, catFromKakao, ICON_BY_CAT } from './kakao.js'
-import { naverTags, matjipCutoff, isMatjip, dongOf } from './naver.js'
+import { enrichWithGoogle, catFromKakao, ICON_BY_CAT, KIND_ICON, catCodeOf } from './kakao.js'
+import { naverTags, matjipCutoff, isMatjip, dongOf, topTagOf } from './naver.js'
 import { cachedEnrich } from './gcache.js'
 import { seedAll, seedUpsert, scannedAll, scannedAdd } from './store.js'
 
@@ -18,11 +18,11 @@ function scannedNear(center, scans) {
   return scans.some((c) => Math.abs(c.lng - center.lng) < 0.02 && Math.abs(c.lat - center.lat) < 0.02)
 }
 
-async function kakaoCategory(rect, kkey) {
+async function kakaoCategory(rect, kkey, catCode = 'FD6') {
   const out = []
   const seen = new Set()
   for (const page of [1, 2, 3]) {
-    const qs = new URLSearchParams({ category_group_code: 'FD6', size: '15', page: String(page), rect })
+    const qs = new URLSearchParams({ category_group_code: catCode, size: '15', page: String(page), rect })
     const r = await fetch(`https://dapi.kakao.com/v2/local/search/category.json?${qs}`, { headers: { Authorization: `KakaoAK ${kkey}` } })
     if (!r.ok) break
     const d = await r.json()
@@ -34,23 +34,24 @@ async function kakaoCategory(rect, kkey) {
 
 // 라이브 스캔: 카카오 수집 → 네이버 블로그로 태깅. 태그 붙은 시드 엔트리 반환.
 // 맛집은 지역 내 블로그 상위 30%로 부여(상대순위).
-async function liveScan(box, kkey, nid, nsec) {
+async function liveScan(box, kkey, nid, nsec, kind) {
   const rect = `${box.w},${box.s},${box.e},${box.n}`
-  const docs = await kakaoCategory(rect, kkey)
+  const docs = await kakaoCategory(rect, kkey, catCodeOf(kind))
+  const topTag = topTagOf(kind)
   const scanned = []
   for (const p of docs.slice(0, LIVE_MAX)) {
-    const c = catFromKakao(p.category_name)
+    const c = kind === 'food' ? catFromKakao(p.category_name) : (p.category_name?.split('>').pop()?.trim() || '')
     const name = p.place_name || '이름 없음'
     const area = dongOf(p.address_name || p.road_address_name)
-    const t = await naverTags(name, area, nid, nsec)
+    const t = await naverTags(name, area, kind, nid, nsec)
     scanned.push({
       id: 'k_' + p.id, name, region: p.road_address_name || p.address_name || '', cat: c,
-      lat: Number(p.y), lng: Number(p.x), icon: ICON_BY_CAT[c], place_url: p.place_url || '',
-      tags: t.tags, blog: t.blog,
+      lat: Number(p.y), lng: Number(p.x), icon: kind === 'food' ? ICON_BY_CAT[c] : KIND_ICON[kind], place_url: p.place_url || '',
+      tags: t.tags, blog: t.blog, kind,
     })
   }
-  const stats = matjipCutoff(scanned.map((s) => s.blog))
-  for (const s of scanned) if (isMatjip(s.blog, stats)) s.tags = [...new Set([...s.tags, '맛집'])]
+  const stats = matjipCutoff(scanned.map((s) => s.blog), kind)
+  if (topTag) for (const s of scanned) if (isMatjip(s.blog, stats)) s.tags = [...new Set([...s.tags, topTag])]
   return scanned.filter((s) => s.tags.length)
 }
 
@@ -59,6 +60,7 @@ export default async function handler(req, res) {
   const gkey = process.env.GOOGLE_PLACES_API_KEY
   const nid = process.env.NAVER_CLIENT_ID
   const nsec = process.env.NAVER_CLIENT_SECRET
+  const kind = (req.query?.kind || 'food').toString()
   const tags = (req.query?.tags || '').toString().split(',').map((s) => s.trim()).filter(Boolean)
   const bbox = (req.query?.bbox || '').toString()
   let box = null
@@ -68,19 +70,19 @@ export default async function handler(req, res) {
   }
   const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 50)
 
-  let seed = await seedAll()
+  let seed = await seedAll(kind)
 
-  // 이 지역을 아직 분석한 적 없으면 라이브 스캔(네이버 태깅) 후 자동 저장
-  if (box && kkey && nid && nsec) {
+  // 이 지역을 아직 분석한 적 없으면 라이브 스캔(네이버 태깅) 후 자동 저장 ('전체'는 스캔 안 함)
+  if (box && kkey && nid && nsec && kind !== 'all') {
     const center = { lng: (box.w + box.e) / 2, lat: (box.s + box.n) / 2 }
-    const scans = await scannedAll()
+    const scans = await scannedAll(kind)
     if (!scannedNear(center, scans)) {
       try {
         // 사용자의 지도 박스(줌마다 크기 제각각)가 아니라, 중심 기준 '고정 크기(약 2.8km) 동네'를 스캔
-        // → 맛집(지역 상위 30%) 기준이 줌과 무관하게 일정해진다(작게 잡아도 별것 아닌 곳이 맛집 안 됨)
+        // → 인기/맛집(지역 상위 30%) 기준이 줌과 무관하게 일정해진다(작게 잡아도 별것 아닌 곳이 안 잡힘)
         const D = 0.014
         const scanBox = { w: center.lng - D, s: center.lat - D, e: center.lng + D, n: center.lat + D }
-        const found = await liveScan(scanBox, kkey, nid, nsec)
+        const found = await liveScan(scanBox, kkey, nid, nsec, kind)
         const byId = new Map(seed.map((p) => [p.id, p]))
         const rows = found.map((f) => {
           const prev = byId.get(f.id)
@@ -90,7 +92,7 @@ export default async function handler(req, res) {
         })
         seed = [...byId.values()]
         await seedUpsert(rows)
-        await scannedAdd(center)
+        await scannedAdd({ ...center, kind })
       } catch (_) { /* 라이브 실패 시 기존 시드로 진행 */ }
     }
   }

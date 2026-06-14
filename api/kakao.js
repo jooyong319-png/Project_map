@@ -6,6 +6,13 @@
 export const ICON_BY_CAT = { 한식: '🍲', 고기: '🍖', 횟집: '🐟', 면: '🍜', 카페: '☕', 기타: '🍽️' }
 export const PALETTE = ['#f3a86b', '#9bcf8a', '#7cb6e8', '#e98f8f', '#c9a3e0', '#e0a35c', '#8fc8a0']
 
+// 검색 종류 → 카카오 카테고리 코드. food=음식점, travel=관광명소, stay=숙박
+export const KIND_CAT = { food: 'FD6', travel: 'AT4', stay: 'AD5' }
+export const KIND_ICON = { food: '🍽️', travel: '📸', stay: '🛏️' }
+export const CAT_KIND = { FD6: 'food', AT4: 'travel', AD5: 'stay' }
+export function catCodeOf(kind) { return KIND_CAT[kind] || 'FD6' }
+export function catsOf(kind) { return kind === 'all' ? ['FD6', 'AT4', 'AD5'] : [catCodeOf(kind)] }
+
 const PRICE = { PRICE_LEVEL_INEXPENSIVE: '₩', PRICE_LEVEL_MODERATE: '₩₩', PRICE_LEVEL_EXPENSIVE: '₩₩₩', PRICE_LEVEL_VERY_EXPENSIVE: '₩₩₩₩' }
 
 // 카카오 category_name("음식점 > 한식 > 국밥") → 앱 카테고리
@@ -116,38 +123,47 @@ export default async function handler(req, res) {
   // 영역(rect) 없고 키워드도 없으면 검색 불가
   if (!rect && !kw) { res.status(200).json({ places: [] }); return }
 
+  const kind = (req.query?.kind || 'food').toString()
+  const cats = catsOf(kind) // food=[FD6], all=[FD6,AT4,AD5] ...
   const isKeyword = !!kw
   const base = isKeyword
     ? 'https://dapi.kakao.com/v2/local/search/keyword.json'
     : 'https://dapi.kakao.com/v2/local/search/category.json'
-  const common = { category_group_code: 'FD6', size: '15' } // FD6 = 음식점
-  if (rect) common.rect = rect
-  if (isKeyword) common.query = kw
 
   const headers = { Authorization: `KakaoAK ${key}` }
   // 모을 목표 개수(격자). lim 으로 50/100/200 까지 진짜 채운다.
   const target = Math.min(Math.max(parseInt(req.query?.lim, 10) || 45, 15), 200)
   try {
-    let raw
-    if (rect) {
-      // 지역(bbox) 검색 → 적응형 격자로 target 개까지
-      const params = { category_group_code: 'FD6', size: '15' }
-      if (isKeyword) params.query = kw
-      raw = await gridCollect(base, params, rect, headers, target)
-    } else {
-      // 전세계 키워드(영역 없음) → 3페이지만
-      const pages = await Promise.all([1, 2, 3].map(async (page) => {
-        const qs = new URLSearchParams({ ...common, page: String(page) })
-        const r = await fetch(`${base}?${qs.toString()}`, { headers })
-        if (!r.ok) return []
-        return (await r.json()).documents || []
-      }))
-      const seen = new Set()
-      raw = []
-      for (const doc of pages.flat()) if (doc.id && !seen.has(doc.id)) { seen.add(doc.id); raw.push(doc) }
+    const per = Math.max(15, Math.ceil(target / cats.length))
+    const seen = new Set()
+    const lists = [] // 카테고리별 결과 (인터리브용)
+    for (const cat of cats) {
+      let docs = []
+      if (rect) {
+        const params = { category_group_code: cat, size: '15' }
+        if (isKeyword) params.query = kw
+        docs = await gridCollect(base, params, rect, headers, per)
+      } else {
+        const pages = await Promise.all([1, 2, 3].map(async (page) => {
+          const qs = new URLSearchParams({ category_group_code: cat, size: '15', page: String(page), ...(isKeyword ? { query: kw } : {}) })
+          const r = await fetch(`${base}?${qs.toString()}`, { headers })
+          if (!r.ok) return []
+          return (await r.json()).documents || []
+        }))
+        docs = pages.flat()
+      }
+      const arr = []
+      for (const d of docs) if (d.id && !seen.has(d.id)) { seen.add(d.id); arr.push({ ...d, _cat: cat }) }
+      lists.push(arr)
     }
+    // 라운드로빈 인터리브(전체일 때 음식·여행지·숙소 균형있게 섞임)
+    const raw = []
+    const maxLen = Math.max(0, ...lists.map((l) => l.length))
+    for (let i = 0; i < maxLen; i++) for (const l of lists) if (l[i]) raw.push(l[i])
     let places = raw.map((p, i) => {
-      const c = catFromKakao(p.category_name)
+      const pk = CAT_KIND[p._cat] || kind // 이 가게의 종류(전체일 때 출처 카테고리 기준)
+      const c = pk === 'food' ? catFromKakao(p.category_name) : (p.category_name?.split('>').pop()?.trim() || '')
+      const icon = pk === 'food' ? ICON_BY_CAT[c] : KIND_ICON[pk]
       return {
         id: 'k_' + p.id,
         name: p.place_name || '이름 없음',
@@ -159,7 +175,7 @@ export default async function handler(req, res) {
         lng: Number(p.x),
         lat: Number(p.y),
         color: PALETTE[i % PALETTE.length],
-        icon: ICON_BY_CAT[c],
+        icon,
         photo: null,
         priceLevel: 0,
         openNow: null,
@@ -167,6 +183,7 @@ export default async function handler(req, res) {
         phone: p.phone || '',
         place_url: p.place_url || '',
         gid: null,
+        kind: pk,
         source: 'kakao',
       }
     })

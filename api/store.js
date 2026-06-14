@@ -26,13 +26,14 @@ function headers(extra = {}) {
 function fRead(p, fb) { try { return JSON.parse(fs.readFileSync(p, 'utf8')) } catch (_) { return fb } }
 function fWrite(p, v) { try { fs.writeFileSync(p, JSON.stringify(v, null, 2) + '\n', 'utf8') } catch (_) {} }
 
-// ===== seed (좌표 + 태그 + 블로그수) =====
-export async function seedAll() {
+// ===== seed (좌표 + 태그 + 블로그수 + 종류) =====
+export async function seedAll(kind = 'food') {
   if (usingSupabase()) {
-    const r = await fetch(`${sbUrl()}/rest/v1/seed?select=*`, { headers: headers() })
+    const f = kind === 'all' ? '' : `kind=eq.${encodeURIComponent(kind)}&`
+    const r = await fetch(`${sbUrl()}/rest/v1/seed?${f}select=*`, { headers: headers() })
     return r.ok ? await r.json() : []
   }
-  return fRead(SEED_PATH, [])
+  return fRead(SEED_PATH, []).filter((p) => kind === 'all' || (p.kind || 'food') === kind)
 }
 
 // 주어진 id 들의 태그·블로그수만 조회(일반 검색 결과에 태그 붙일 때)
@@ -75,13 +76,13 @@ export async function seedUpsert(rows) {
   fWrite(SEED_PATH, [...byId.values()])
 }
 
-// ===== seed_scanned (이미 분석한 지역 중심들) =====
-export async function scannedAll() {
+// ===== seed_scanned (이미 분석한 지역 중심들, 종류별) =====
+export async function scannedAll(kind = 'food') {
   if (usingSupabase()) {
-    const r = await fetch(`${sbUrl()}/rest/v1/seed_scanned?select=lng,lat`, { headers: headers() })
+    const r = await fetch(`${sbUrl()}/rest/v1/seed_scanned?kind=eq.${encodeURIComponent(kind)}&select=lng,lat`, { headers: headers() })
     return r.ok ? await r.json() : []
   }
-  return fRead(SCAN_PATH, [])
+  return fRead(SCAN_PATH, []).filter((c) => (c.kind || 'food') === kind)
 }
 
 export async function scannedAdd(center) {

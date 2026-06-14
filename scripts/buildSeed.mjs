@@ -9,8 +9,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { catFromKakao, ICON_BY_CAT } from '../api/kakao.js'
-import { naverTags, matjipCutoff, isMatjip, dongOf } from '../api/naver.js'
+import { catFromKakao, ICON_BY_CAT, KIND_ICON, catCodeOf } from '../api/kakao.js'
+import { naverTags, matjipCutoff, isMatjip, dongOf, topTagOf } from '../api/naver.js'
 import { seedAll, seedUpsert, scannedAll, scannedAdd, usingSupabase } from '../api/store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -42,11 +42,11 @@ function rectOf([lng, lat]) {
   return `${lng - d},${lat - d},${lng + d},${lat + d}`
 }
 
-async function kakaoCategory(rect, kkey) {
+async function kakaoCategory(rect, kkey, catCode) {
   const out = []
   const seen = new Set()
   for (const page of [1, 2, 3]) {
-    const qs = new URLSearchParams({ category_group_code: 'FD6', size: '15', page: String(page), rect })
+    const qs = new URLSearchParams({ category_group_code: catCode, size: '15', page: String(page), rect })
     const r = await fetch(`https://dapi.kakao.com/v2/local/search/category.json?${qs}`, {
       headers: { Authorization: `KakaoAK ${kkey}` },
     })
@@ -60,8 +60,8 @@ async function kakaoCategory(rect, kkey) {
   return out
 }
 
-function toItem(p) {
-  const c = catFromKakao(p.category_name)
+function toItem(p, kind) {
+  const c = kind === 'food' ? catFromKakao(p.category_name) : (p.category_name?.split('>').pop()?.trim() || '')
   return {
     id: 'k_' + p.id,
     name: p.place_name || '이름 없음',
@@ -70,7 +70,7 @@ function toItem(p) {
     cat: c,
     lng: Number(p.x),
     lat: Number(p.y),
-    icon: ICON_BY_CAT[c],
+    icon: kind === 'food' ? ICON_BY_CAT[c] : KIND_ICON[kind],
     place_url: p.place_url || '',
     source: 'kakao',
   }
@@ -85,13 +85,20 @@ async function main() {
   if (!kkey || !nid || !nsec) { console.error('KAKAO_REST_KEY / NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 필요'); process.exit(1) }
   console.log(usingSupabase() ? '저장소: Supabase (공유·영구)' : '저장소: 로컬 파일')
 
-  const args = process.argv.slice(2)
+  let args = process.argv.slice(2)
+  // --kind food|travel|stay
+  let kind = 'food'
+  const ki = args.indexOf('--kind')
+  if (ki >= 0) { kind = args[ki + 1] || 'food'; args = args.filter((_, i) => i !== ki && i !== ki + 1) }
+  const catCode = catCodeOf(kind)
+  const topTag = topTagOf(kind)
+  console.log(`종류: ${kind} (카테고리 ${catCode}, 인기태그 '${topTag}')`)
   const areaNames = args.includes('--all') ? Object.keys(AREAS) : (args.length ? args : DEFAULT_AREAS)
 
-  // 기존 seed/스캔 로드(누적)
+  // 기존 seed/스캔 로드(해당 종류만, 누적)
   const seed = {}
-  for (const s of await seedAll()) seed[s.id] = s
-  const scans = await scannedAll()
+  for (const s of await seedAll(kind)) seed[s.id] = s
+  const scans = await scannedAll(kind)
   const allUpserts = []
 
   let totalNew = 0
@@ -100,28 +107,28 @@ async function main() {
     if (!center) { console.warn(`스킵: 모르는 동네 "${name}"`); continue }
     if (!scans.some((c) => Math.abs(c.lng - center[0]) < 0.02 && Math.abs(c.lat - center[1]) < 0.02)) {
       scans.push({ lng: center[0], lat: center[1] })
-      await scannedAdd({ lng: center[0], lat: center[1] })
+      await scannedAdd({ lng: center[0], lat: center[1], kind })
     }
     process.stdout.write(`\n[${name}] 카카오 수집...`)
-    const docs = await kakaoCategory(rectOf(center), kkey)
+    const docs = await kakaoCategory(rectOf(center), kkey, catCode)
     process.stdout.write(` ${docs.length}곳 → 네이버 블로그 태깅...`)
-    const items = docs.map(toItem)
+    const items = docs.map((p) => toItem(p, kind))
     const scanned = []
     for (const it of items) {
-      const t = await naverTags(it.name, it.dong, nid, nsec)
+      const t = await naverTags(it.name, it.dong, kind, nid, nsec)
       scanned.push({ it, tags: t.tags, blog: t.blog })
     }
-    const stats = matjipCutoff(scanned.map((s) => s.blog))
+    const stats = matjipCutoff(scanned.map((s) => s.blog), kind)
     let tagged = 0
     for (const s of scanned) {
-      const tags = isMatjip(s.blog, stats) ? [...new Set([...s.tags, '맛집'])] : s.tags
+      const tags = (topTag && isMatjip(s.blog, stats)) ? [...new Set([...s.tags, topTag])] : s.tags
       if (!tags.length) continue
       tagged++
       const it = s.it
       const row = {
         id: it.id, name: it.name, region: it.region, cat: it.cat,
         lat: it.lat, lng: it.lng, place_url: it.place_url, icon: it.icon,
-        tags: [...new Set(tags)], blog: s.blog, // 방식 변경 반영 위해 누적 아닌 '교체'
+        tags: [...new Set(tags)], blog: s.blog, kind, // 방식 변경 반영 위해 누적 아닌 '교체'
       }
       seed[it.id] = row
       allUpserts.push(row)

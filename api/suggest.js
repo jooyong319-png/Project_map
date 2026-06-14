@@ -3,18 +3,18 @@
 //  2) 그 외(예: 우래옥)           → 전국 키워드 검색(현재 지도 근처 우선)
 // GET /api/suggest?q=...&bbox=... → { results: [{ id, name, region, cat, icon, lng, lat }] }
 
-import { catFromKakao, ICON_BY_CAT } from './kakao.js'
+import { catFromKakao, ICON_BY_CAT, KIND_ICON, catCodeOf } from './kakao.js'
 
 const KAKAO = 'https://dapi.kakao.com/v2/local'
 
-function mapDoc(p) {
-  const c = catFromKakao(p.category_name)
+function mapDoc(p, kind) {
+  const c = kind === 'food' ? catFromKakao(p.category_name) : (p.category_name?.split('>').pop()?.trim() || '')
   return {
     id: 'k_' + p.id,
     name: p.place_name || '',
     region: p.road_address_name || p.address_name || '',
     cat: c,
-    icon: ICON_BY_CAT[c],
+    icon: kind === 'food' ? ICON_BY_CAT[c] : KIND_ICON[kind],
     lng: Number(p.x),
     lat: Number(p.y),
   }
@@ -34,28 +34,29 @@ async function geocodeRegion(q, key) {
   return { lng: Number(doc.x), lat: Number(doc.y), d: dong ? 0.013 : gu ? 0.035 : 0.08 }
 }
 
-async function keyword(q, key, extra = '') {
-  const r = await fetch(`${KAKAO}/search/keyword.json?category_group_code=FD6&size=10&query=${encodeURIComponent(q)}${extra}`, { headers: { Authorization: `KakaoAK ${key}` } })
+async function keyword(q, key, kind, extra = '') {
+  const r = await fetch(`${KAKAO}/search/keyword.json?category_group_code=${catCodeOf(kind)}&size=10&query=${encodeURIComponent(q)}${extra}`, { headers: { Authorization: `KakaoAK ${key}` } })
   if (!r.ok) return []
   const d = await r.json()
-  return (d.documents || []).map(mapDoc).filter((x) => x.name && Number.isFinite(x.lng))
+  return (d.documents || []).map((p) => mapDoc(p, kind)).filter((x) => x.name && Number.isFinite(x.lng))
 }
 
 export default async function handler(req, res) {
   const key = process.env.KAKAO_REST_KEY
   const q = (req.query?.q || '').toString().trim()
+  const kind = (req.query?.kind || 'food').toString()
   if (!key || q.length < 1) { res.status(200).json({ results: [] }); return }
 
   try {
     const tokens = q.split(/\s+/).filter(Boolean)
-    // 1) "지역 + 음식" 시도: 마지막 토큰을 음식, 앞부분을 지역으로 보고 지역이 좌표로 잡히면 그 동네에서 음식 검색
+    // 1) "지역 + 음식/장소" 시도: 마지막 토큰을 키워드, 앞부분을 지역으로 보고 그 동네에서 검색
     if (tokens.length >= 2) {
       const food = tokens[tokens.length - 1]
       const region = tokens.slice(0, -1).join(' ')
       const geo = await geocodeRegion(region, key)
       if (geo) {
         const rect = `&rect=${geo.lng - geo.d},${geo.lat - geo.d},${geo.lng + geo.d},${geo.lat + geo.d}`
-        const results = await keyword(food, key, rect)
+        const results = await keyword(food, key, kind, rect)
         if (results.length) { res.status(200).json({ results }); return }
       }
     }
@@ -66,7 +67,7 @@ export default async function handler(req, res) {
       const [w, s, e, n] = bbox.split(',').map(Number)
       if ([w, s, e, n].every(Number.isFinite)) bias = `&x=${(w + e) / 2}&y=${(s + n) / 2}&radius=20000&sort=distance`
     }
-    res.status(200).json({ results: await keyword(q, key, bias) })
+    res.status(200).json({ results: await keyword(q, key, kind, bias) })
   } catch (_) {
     res.status(200).json({ results: [] })
   }

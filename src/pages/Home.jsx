@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import FilterBar from '../components/FilterBar.jsx'
 import RestaurantList from '../components/RestaurantList.jsx'
 import GeoPanel from '../components/GeoPanel.jsx'
@@ -6,10 +7,14 @@ import DetailModal from '../components/DetailModal.jsx'
 import { getRestaurants, getCuration } from '../lib/places.js'
 import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
 import { COUNTRIES } from '../data/countries.js'
+import { kindOf } from '../data/kinds.js'
 
 const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
 
 export default function Home() {
+  const [kind, setKind] = useState('food') // 검색 종류: food/travel/stay
+  const [headerSlot, setHeaderSlot] = useState(null) // 헤더의 검색바 포털 위치
+  useEffect(() => { setHeaderSlot(document.getElementById('header-search-slot')) }, [])
   const [query, setQuery] = useState('')
   const [suggests, setSuggests] = useState([]) // 검색바 자동완성(가게)
   const pickedRef = useRef(false) // 자동완성 선택 직후 재조회 방지
@@ -30,6 +35,7 @@ export default function Home() {
   const peekTimer = useRef(null)
   const mapBoundsRef = useRef(null) // 현재 지도 영역(검색 기준)
   const pendingSearchRef = useRef(null) // 지역 이동 후 자동 검색 예약 {q}
+  const pendingSelectRef = useRef(null) // 검색으로 고른 가게 id — 결과 로드되면 선택+상세
   // 모바일 바텀시트 드래그 스냅 ('full' | 'half' | 'collapsed')
   const [sheet, setSheet] = useState('half')
   const sheetRef = useRef(null)
@@ -57,7 +63,7 @@ export default function Home() {
     const start = Date.now()
     const fetcher = search.curation
       ? getCuration()
-      : getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim, tags: search.tags })
+      : getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim, tags: search.tags, kind: search.kind })
     fetcher.then(({ items, source }) => {
       const wait = Math.max(0, 900 - (Date.now() - start))
       setTimeout(() => {
@@ -69,6 +75,14 @@ export default function Home() {
     })
     return () => { active = false }
   }, [search])
+
+  // 검색으로 고른 가게가 결과에 있으면 선택 + 상세 열기 (정확히 그곳에 도착)
+  useEffect(() => {
+    if (!pendingSelectRef.current || !items.length) return
+    const hit = items.find((x) => x.id === pendingSelectRef.current)
+    pendingSelectRef.current = null
+    if (hit) { setSelectedId(hit.id); setOpenItem(hit) }
+  }, [items])
 
   // 북마크/저장맛집 로드
   useEffect(() => {
@@ -86,11 +100,14 @@ export default function Home() {
   const showingSaved = bookmarkOnly || search.tick === 0
   const visible = useMemo(() => {
     let r = showingSaved ? savedItems : items
-    if (search.sort === 'rating') r = [...r].sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)
-    else r = [...r].sort((a, b) => b.reviews - a.reviews) // 기본: 리뷰 많은순
+    // '전체'는 음식·여행지·숙소 인터리브 순서 유지(정렬하면 한 종류로 쏠림)
+    if (search.kind !== 'all') {
+      if (search.sort === 'rating') r = [...r].sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)
+      else r = [...r].sort((a, b) => b.reviews - a.reviews) // 기본: 리뷰 많은순
+    }
     if (search.price) r = r.filter((d) => d.priceLevel === search.price) // 가격대 필터(가격 미상은 제외)
     return r.slice(0, search.lim)
-  }, [items, savedItems, showingSaved, search.sort, search.lim, search.price])
+  }, [items, savedItems, showingSaved, search.sort, search.lim, search.price, search.kind])
 
   // 지도 마커 = TOP10 + 저장한 맛집(검색에 없어도 항상 표시). 저장된 건 saved 표시.
   const mapItems = useMemo(() => {
@@ -164,11 +181,24 @@ export default function Home() {
   // 검색 커밋 (현재 검색어/필터 + bbox 로). 이걸 호출할 때만 실제 검색이 일어난다.
   const commitSearch = (bbox = null, qOverride, global = false) => {
     triggerPeek()
-    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, global, sort, lim: limit, price, tags, tick: s.tick + 1 }))
+    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, global, sort, lim: limit, price, tags, kind, tick: s.tick + 1 }))
   }
 
-  // 지도 "이 지역 TOP N" → 현재 영역에서 (선택 키워드로) 검색
-  const onAreaSearch = (bbox) => commitSearch(bbox, keyword)
+  // 카테고리 전환(음식/여행지/숙소) — 태그·검색어 초기화(태그 칩이 그 종류로 바뀜). 실제 검색은 '필터 적용'/검색 때.
+  const onKind = (k) => {
+    if (k === kind) return
+    setKind(k); setTags([]); setQuery(''); setSuggests([])
+    if (k !== 'food') setPrice(0) // 가격은 음식만
+  }
+
+  // 지도 카테고리 버튼(음식/여행지/숙소) → 그 카테고리로 전환 + 현재 영역 검색 (1탭)
+  const onAreaSearch = (bbox, k = kind) => {
+    const sameKind = k === kind
+    if (!sameKind) { setKind(k); setTags([]); setQuery(''); if (k !== 'food') setPrice(0) }
+    triggerPeek()
+    const px = sameKind ? price : (k === 'food' ? price : 0)
+    setSearch((s) => ({ q: '', bbox, sort, lim: limit, price: px, tags: sameKind ? tags : [], kind: k, tick: s.tick + 1 }))
+  }
   // 검색바 자동완성: 타이핑하면 전국 가게를 카카오로 제안
   useEffect(() => {
     if (pickedRef.current) { pickedRef.current = false; setSuggests([]); return }
@@ -178,29 +208,31 @@ export default function Home() {
       try {
         const b = mapBoundsRef.current
         const bb = Array.isArray(b) ? `&bbox=${b.join(',')}` : ''
-        const r = await fetch(`/api/suggest?q=${encodeURIComponent(q)}${bb}`)
+        const r = await fetch(`/api/suggest?q=${encodeURIComponent(q)}&kind=${kind}${bb}`)
         const d = await r.json()
         setSuggests(Array.isArray(d.results) ? d.results : [])
       } catch (_) { setSuggests([]) }
     }, 220)
     return () => clearTimeout(t)
-  }, [query])
+  }, [query, kind])
 
-  // 자동완성에서 가게 선택 → 그 위치로 날아가서 그 지역 검색
+  // 자동완성에서 가게 선택 → 그 위치로 날아가 그 동네 검색 + '그 가게'를 선택/상세 오픈
   const pickSuggest = (s) => {
     pickedRef.current = true
     setQuery(s.name)
     setSuggests([])
     pendingSearchRef.current = { q: '' } // 도착 후 그 동네 검색
+    pendingSelectRef.current = s.id // 결과 로드되면 이 가게 선택+상세
     setNavTo({ center: [s.lng, s.lat], zoom: 16 })
   }
 
-  // 검색 버튼/Enter → 현재 보고 있는 지도 영역에서 검색 (텍스트 우선, 없으면 키워드 칩)
+  // 검색 버튼/Enter → 전국 구글 의미검색(결과 리스트). 보는 화면에 안 갇히고, 자동선택도 안 함.
+  // (특정 가게로 바로 가고 싶으면 자동완성에서 클릭하면 됨)
   const runTextSearch = () => {
-    const q = query.trim() || keyword
-    const b = mapBoundsRef.current
-    if (b) commitSearch(b, q)             // 지도: 현재 보고 있는 영역
-    else { if (!q) return; commitSearch(null, q, true) } // 지구본: 전세계 검색
+    const q = query.trim()
+    if (!q) { const b = mapBoundsRef.current; if (b) commitSearch(b, '') ; return } // 빈 검색 → 현재 영역
+    setSuggests([])
+    commitSearch(null, q, true) // 전국 구글 검색 → 리스트
   }
   // 필터 패널의 '필터 적용' → 선택 지역으로 이동 + 그 지역에서 검색 + 패널 닫기
   const applyFilters = () => {
@@ -257,75 +289,63 @@ export default function Home() {
     mapBoundsRef.current = null
   }
 
+  // 검색바 + 필터 아이콘 (헤더로 포털) — 검색과 필터가 한 묶음으로 보이게
+  const searchBar = (
+    <div className="header-search-wrap">
+    <form className="search" onSubmit={(e) => { e.preventDefault(); runTextSearch() }}>
+      <svg className="search-ic" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z" />
+      </svg>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onBlur={() => setTimeout(() => setSuggests([]), 150)}
+        placeholder="맛집·여행지·숙소, 콕 찍어 검색"
+      />
+      <button type="submit" className="search-go">검색</button>
+      {suggests.length > 0 && (
+        <div className="search-suggests">
+          {suggests.map((s) => (
+            <button key={s.id} type="button" className="search-suggest" onMouseDown={() => pickSuggest(s)}>
+              <span className="ss-ic">{s.icon || '🍽️'}</span>
+              <span className="ss-name">{s.name}</span>
+              <span className="ss-region">{s.region}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
+      <button
+        className={`hdr-filter ${filtersOpen ? 'on' : ''}`}
+        onClick={() => setFiltersOpen((o) => !o)}
+        aria-expanded={filtersOpen}
+        title="필터" aria-label="필터"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" /></svg>
+      </button>
+    </div>
+  )
+
   return (
     <>
-      {/* 상단: 키워드 검색은 항상 보임 + 작은 '필터' 버튼 */}
-      <div className="filters">
-        <form className="search" onSubmit={(e) => { e.preventDefault(); runTextSearch() }}>
-          <svg className="search-ic" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z" />
-          </svg>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onBlur={() => setTimeout(() => setSuggests([]), 150)}
-            placeholder="가게 이름 검색 (예: 우래옥)"
-          />
-          <button type="submit" className="search-go">검색</button>
-          {suggests.length > 0 && (
-            <div className="search-suggests">
-              {suggests.map((s) => (
-                <button key={s.id} type="button" className="search-suggest" onMouseDown={() => pickSuggest(s)}>
-                  <span className="ss-ic">{s.icon || '🍽️'}</span>
-                  <span className="ss-name">{s.name}</span>
-                  <span className="ss-region">{s.region}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </form>
-        <button
-          className={`save-toggle top ${bookmarkOnly ? 'on' : ''}`}
-          onClick={() => setBookmarkOnly((o) => !o)}
-          title="저장한 곳만 보기"
-          aria-label="저장한 곳만 보기"
-          aria-pressed={bookmarkOnly}
-        >
-          <svg viewBox="0 0 24 24"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
-        </button>
-        <button
-          className="filters-toggle"
-          onClick={() => setFiltersOpen((o) => !o)}
-          aria-expanded={filtersOpen}
-        >
-          ⚙ 필터
-        </button>
-      </div>
+      {headerSlot && createPortal(searchBar, headerSlot)}
 
       {filtersOpen && <div className="filter-backdrop" onClick={() => setFiltersOpen(false)} />}
       <div className={`filterpanel ${filtersOpen ? 'open' : ''}`}>
         <div className="sheet-handle" onClick={() => setFiltersOpen(false)}><span className="sheet-grip" /></div>
         <button className="filterpanel-close" onClick={() => setFiltersOpen(false)} aria-label="닫기">×</button>
         <div className="filter-scroll">
-        <div className="filter-controls">
-          <select className="sortsel" value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="reviews">리뷰 많은순</option>
-            <option value="rating">평점 높은순</option>
-          </select>
-          <select className="sortsel" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-            <option value={50}>50개</option>
-            <option value={100}>100개</option>
-            <option value={200}>200개</option>
-          </select>
-        </div>
         <FilterBar
+          kind={kind} onKind={onKind}
+          sort={sort} onSort={setSort}
+          limit={limit} onLimit={setLimit}
           country={country} onCountry={onCountry}
           city={city} onCity={onCity}
           area={area} onArea={onArea}
           keyword={keyword} onKeyword={setKeyword}
           price={price} onPrice={setPrice}
-          tags={tags} onToggleTag={toggleTag}
+          tags={tags} onToggleTag={toggleTag} tagOptions={kindOf(kind).tags}
           onRegionPick={onRegionPick} pickedLabel={pickedLabel}
         />
         </div>
@@ -337,6 +357,15 @@ export default function Home() {
       <div className="count">
         <span>{title.prefix}{title.suffix && <> <b>{title.suffix}</b></>}</span>
         {source === 'mock' && !showingSaved && <span className="badge-mock">샘플 데이터</span>}
+        <div className="count-actions">
+          <button
+            className={`save-toggle top ${bookmarkOnly ? 'on' : ''}`}
+            onClick={() => setBookmarkOnly((o) => !o)}
+            title="저장한 곳만 보기" aria-label="저장한 곳만 보기" aria-pressed={bookmarkOnly}
+          >
+            <svg viewBox="0 0 24 24"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
+          </button>
+        </div>
       </div>
 
       <div className={`wrap ${listOpen ? '' : 'collapsed'} ${peek ? 'peeking' : ''} ${openItem ? 'detail-open' : ''} ${mapMoving ? 'mapmoving' : ''}`}>
@@ -365,11 +394,15 @@ export default function Home() {
             loading={loading}
             onOpen={onPick}
             onBookmark={onBookmark}
-            emptyText={showingSaved ? '저장한 맛집이 없어요 🔖' : '구글에 등록된 식당이 없어요 🥲'}
+            emptyText={
+              showingSaved
+                ? '저장한 곳이 없어요 🔖'
+                : `이 지역에 표시할 ${({ all: '장소', food: '맛집', travel: '여행지', stay: '숙소' })[kind] || '장소'}이 없어요 🥲`
+            }
           />
           <div className="results-foot">평점·리뷰 수는 Google Places API 기준입니다.</div>
         </div>
-        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onReset={onReset} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} />
+        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onReset={onReset} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} kind={kind} />
         <DetailModal data={openItem} onClose={() => setOpenItem(null)} onBookmark={onBookmark} bookmarked={openItem ? bookmarks.includes(openItem.id) : false} sheet="half" />
       </div>
     </>

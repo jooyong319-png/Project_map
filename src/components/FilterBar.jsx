@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { COUNTRIES, KEYWORDS, CITIES } from '../data/countries.js'
+import { KINDS } from '../data/kinds.js'
 
 // 키워드 뜻(작게 표시)
 const KW_DESC = {
@@ -40,10 +41,19 @@ function ChipRow({ children }) {
 // 구글 priceLevel(1~4) → 1인 기준 대략 금액대 라벨(근사치)
 const PRICES = [[1, '~1만원'], [2, '1~3만원'], [3, '3~5만원'], [4, '5만원+']]
 
-// 리뷰 분석 태그 필터 (한국 한정 — 시드에서 검색)
-const TAG_CHIPS = [['맛집', '검증된 인기'], ['노포', '오래된 가게'], ['혼밥', '혼밥 친화'], ['핫플', 'SNS에서 핫한']]
+// 태그 설명(블로그 분석 기반). 종류별 태그는 kinds.js 에서 옴.
+const TAG_DESC = {
+  맛집: '블로그에서 인기', 인기: '블로그에서 인기', 노포: '오래된 가게', 혼밥: '혼밥 친화', 핫플: 'SNS에서 핫한',
+  // 관광지
+  저렴한: '무료·저렴', 인생샷: '포토존', 'SNS 핫플': 'SNS에서 핫한', 랜드마크: '대표 명소', 박물관: '전시·박물관', 공원: '공원·산책',
+  // 숙소
+  휴양지: '쉬기 좋은', 가성비: '가성비', 애견동반: '반려견 OK', 호캉스: '호캉스', 럭셔리: '고급',
+}
 
-export default function FilterBar({ country, onCountry, city, onCity, area, onArea, keyword, onKeyword, price, onPrice, tags = [], onToggleTag, onRegionPick, pickedLabel }) {
+const SORTS = [['reviews', '리뷰 많은순'], ['rating', '평점 높은순']]
+const LIMITS = [50, 100, 200]
+
+export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, onLimit, country, onCountry, city, onCity, area, onArea, keyword, onKeyword, price, onPrice, tags = [], onToggleTag, tagOptions = [], onRegionPick, pickedLabel }) {
   const [regionModal, setRegionModal] = useState(false)
   const isKorea = !country || country === '대한민국' // 태그 필터는 카카오(한국) 한정
   const kws = KEYWORDS[country] || []
@@ -73,7 +83,31 @@ export default function FilterBar({ country, onCountry, city, onCity, area, onAr
   }
   return (
     <div className="filterbar">
-      <div className="chips" style={{ paddingTop: 6, paddingBottom: 0 }}>
+      <div className="filter-sec-label">카테고리</div>
+      <div className="filter-cat-seg">
+        {KINDS.map((k) => (
+          <button key={k.key} className={`cat-btn ${kind === k.key ? 'on' : ''}`} onClick={() => onKind && onKind(k.key)}>
+            <span className="kind-ic">{k.icon}</span>{k.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="filter-sec-label">정렬</div>
+      <div className="chips chips-wrap">
+        {SORTS.map(([v, label]) => (
+          <button key={v} className={`chip ${sort === v ? 'active' : ''}`} onClick={() => onSort && onSort(v)}>{label}</button>
+        ))}
+      </div>
+
+      <div className="filter-sec-label">개수</div>
+      <div className="chips chips-wrap">
+        {LIMITS.map((n) => (
+          <button key={n} className={`chip ${limit === n ? 'active' : ''}`} onClick={() => onLimit && onLimit(n)}>{n}개</button>
+        ))}
+      </div>
+
+      <div className="filter-sec-label">지역</div>
+      <div className="chips" style={{ paddingTop: 0, paddingBottom: 0 }}>
         <button className="region-btn" onClick={() => setRegionModal(true)}>
           📍 {regionLabel}<span className="region-arrow">▾</span>
         </button>
@@ -133,29 +167,36 @@ export default function FilterBar({ country, onCountry, city, onCity, area, onAr
         </>
       )}
 
-      <div className="chips chips-wrap">
-        <button className={`chip ${keyword === '' ? 'active' : ''}`} onClick={() => onKeyword('')}>전체</button>
-        {kws.map((k) => (
-          <button key={k} className={`chip kw-chip ${keyword === k ? 'active' : ''}`} onClick={() => onKeyword(k)}>
-            <span className="kw-main">{k}</span>
-            {KW_DESC[k] && <span className="kw-sub">{KW_DESC[k]}</span>}
-          </button>
-        ))}
-      </div>
-      <div className="chips chips-wrap">
-        <button className={`chip ${!price ? 'active' : ''}`} onClick={() => onPrice(0)}>가격 전체</button>
-        {PRICES.map(([lv, label]) => (
-          <button key={lv} className={`chip ${price === lv ? 'active' : ''}`} onClick={() => onPrice(price === lv ? 0 : lv)}>{label}</button>
-        ))}
-      </div>
+      {kws.length > 0 && <>
+        <div className="filter-sec-label">키워드</div>
+        <div className="chips chips-wrap">
+          <button className={`chip ${keyword === '' ? 'active' : ''}`} onClick={() => onKeyword('')}>전체</button>
+          {kws.map((k) => (
+            <button key={k} className={`chip kw-chip ${keyword === k ? 'active' : ''}`} onClick={() => onKeyword(k)}>
+              <span className="kw-main">{k}</span>
+              {KW_DESC[k] && <span className="kw-sub">{KW_DESC[k]}</span>}
+            </button>
+          ))}
+        </div>
+      </>}
 
-      {isKorea && (
+      {kind === 'food' && <>
+        <div className="filter-sec-label">가격 <span>1인 기준</span></div>
+        <div className="chips chips-wrap">
+          <button className={`chip ${!price ? 'active' : ''}`} onClick={() => onPrice(0)}>가격 전체</button>
+          {PRICES.map(([lv, label]) => (
+            <button key={lv} className={`chip ${price === lv ? 'active' : ''}`} onClick={() => onPrice(price === lv ? 0 : lv)}>{label}</button>
+          ))}
+        </div>
+      </>}
+
+      {isKorea && tagOptions.length > 0 && (
         <>
-          <div className="filter-tag-label">태그 <span>리뷰 분석 · 저장된 곳에서</span></div>
+          <div className="filter-sec-label">태그 <span>블로그 분석 · 저장된 곳에서</span></div>
           <div className="chips chips-wrap">
-            {TAG_CHIPS.map(([t, desc]) => (
+            {tagOptions.map((t) => (
               <button key={t} className={`chip nopo-chip ${tags.includes(t) ? 'active' : ''}`} onClick={() => onToggleTag(t)}>
-                {t} <span className="nopo-sub">{desc}</span>
+                {t} {TAG_DESC[t] && <span className="nopo-sub">{TAG_DESC[t]}</span>}
               </button>
             ))}
           </div>

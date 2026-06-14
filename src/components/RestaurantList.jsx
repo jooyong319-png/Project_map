@@ -5,7 +5,7 @@ export default function RestaurantList({ items, selected, bookmarks, onOpen, onB
     return <div className="empty">불러오는 중… ⏳</div>
   }
   if (!items.length) {
-    return <div className="empty">{emptyText || '구글에 등록된 식당이 없어요 🥲'}</div>
+    return <div className="empty">{emptyText || '이 지역에 표시할 곳이 없어요 🥲'}</div>
   }
   return (
     <div>
