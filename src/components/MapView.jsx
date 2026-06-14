@@ -257,28 +257,22 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
         </Marker>
       ))}
     </MapContainer>
-    {onSearchArea && (
-      canSearch ? (
-        <div className="area-search-wrap">
-          <div className="area-bubble">{searching ? '검색 중…' : '📍 이 지역에서 찾기'}</div>
-          <div className="area-search-seg">
-            {KINDS.map((k) => (
-              <button
-                key={k.key}
-                className={`area-seg-btn ${kind === k.key ? 'on' : ''}`}
-                onClick={() => searchHere(k.key)}
-                disabled={searching}
-              >
-                <span className="area-seg-ic">{k.icon}</span>{k.label}
-              </button>
-            ))}
-          </div>
+    {onSearchArea && canSearch && (
+      <div className="area-search-wrap">
+        <div className="area-bubble">{searching ? '검색 중…' : '📍 이 지역에서 찾기'}</div>
+        <div className="area-search-seg">
+          {KINDS.map((k) => (
+            <button
+              key={k.key}
+              className={`area-seg-btn ${kind === k.key ? 'on' : ''}`}
+              onClick={() => searchHere(k.key)}
+              disabled={searching}
+            >
+              <span className="area-seg-ic">{k.icon}</span>{k.label}
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="area-search hint">
-          🔍 더 확대하면 이 지역의 음식·여행지·숙소를 볼 수 있어요
-        </div>
-      )
+      </div>
     )}
    </>
   )
