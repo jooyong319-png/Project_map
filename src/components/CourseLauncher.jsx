@@ -44,7 +44,11 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, hasCurrent, onC
   return (
     <>
       <div className="course-pop-backdrop" onClick={onClose} />
-      <div className="course-pop" role="dialog">
+      <div className="course-pop" role="dialog" aria-label="AI 코스 짜기">
+        <div className="cl-head">
+          <span>🧭 AI 코스 짜기</span>
+          <button className="region-modal-close" onClick={onClose} aria-label="닫기">×</button>
+        </div>
         <div className="cl-field-label">위치</div>
         <button
           className={`cl-loc-opt ${loc?.type === 'current' ? 'on' : ''}`}

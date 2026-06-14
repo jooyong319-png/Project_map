@@ -67,6 +67,7 @@ header {
   box-shadow: var(--shadow-lg); border: 1px solid var(--line); padding: 16px;
   animation: regionIn .18s ease both;
 }
+.cl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 800; font-size: 16px; padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
 .cl-field-label { font-size: 12px; font-weight: 800; color: #555; margin: 16px 0 7px; }
 .course-pop > .cl-field-label:first-child { margin-top: 0; }
 .cl-field-label span { font-weight: 500; color: #aaa; font-size: 11px; margin-left: 3px; }
