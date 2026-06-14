@@ -122,6 +122,54 @@ async function geminiCourse(cand, key, theme) {
   return { title: parsed.title || '하루 추천 코스', summary: parsed.summary || '', stops, by: 'ai' }
 }
 
+// ===== 구간별 이동수단(차/대중교통/도보) =====
+function haversine(a, b) {
+  const R = 6371000, toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng)
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(x))
+}
+// 도보: 직선거리×1.3 우회보정 / 75m·분(=4.5km/h)
+function walkLeg(a, b) {
+  const d = haversine(a, b) * 1.3
+  return { min: Math.max(1, Math.round(d / 75)), dist: Math.round(d) }
+}
+// 차: 카카오모빌리티 자동차 길찾기 (기존 KAKAO_REST_KEY)
+async function carLeg(a, b, kkey) {
+  if (!kkey) return null
+  try {
+    const r = await fetch(`https://apis-navi.kakaomobility.com/v1/directions?origin=${a.lng},${a.lat}&destination=${b.lng},${b.lat}&priority=RECOMMEND`, { headers: { Authorization: `KakaoAK ${kkey}` } })
+    if (!r.ok) return null
+    const s = (await r.json()).routes?.[0]?.summary
+    return s ? { min: Math.max(1, Math.round(s.duration / 60)), dist: s.distance } : null
+  } catch (_) { return null }
+}
+// 대중교통: ODsay (버스/지하철 번호 포함). ODSAY_API_KEY 필요(없으면 생략)
+async function transitLeg(a, b, okey) {
+  if (!okey) return null
+  try {
+    const r = await fetch(`https://api.odsay.com/v1/api/searchPubTransPathT?SX=${a.lng}&SY=${a.lat}&EX=${b.lng}&EY=${b.lat}&apiKey=${encodeURIComponent(okey)}`)
+    if (!r.ok) return null
+    const path = (await r.json()).result?.path?.[0]
+    if (!path?.info) return null
+    const buses = [], subways = []
+    for (const sp of path.subPath || []) {
+      if (sp.trafficType === 2) for (const l of sp.lane || []) if (l.busNo) buses.push(l.busNo)
+      else if (sp.trafficType === 1) for (const l of sp.lane || []) if (l.name) subways.push(l.name)
+    }
+    return { min: Math.round(path.info.totalTime), buses: [...new Set(buses)], subways: [...new Set(subways)] }
+  } catch (_) { return null }
+}
+// 코스 stops 사이(1→2, 2→3 …) 구간별 이동수단을 계산
+async function buildLegs(stops, kkey, okey) {
+  const pairs = []
+  for (let i = 0; i < stops.length - 1; i++) pairs.push([stops[i], stops[i + 1]])
+  return Promise.all(pairs.map(async ([a, b]) => {
+    const [car, transit] = await Promise.all([carLeg(a, b, kkey), transitLeg(a, b, okey)])
+    return { car, transit, walk: walkLeg(a, b) }
+  }))
+}
+
 export default async function handler(req, res) {
   const bbox = (req.query?.bbox || '').toString().split(',').map(Number)
   if (bbox.length !== 4 || !bbox.every(Number.isFinite)) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
@@ -148,6 +196,10 @@ export default async function handler(req, res) {
       course.stops = course.stops.map((s) => ({ source: 'kakao', ...s }))
       const gkey = process.env.GOOGLE_PLACES_API_KEY
       if (gkey) course.stops = await cachedEnrich(course.stops, course.stops.length, (it) => enrichWithGoogle(it, gkey))
+    }
+    // 구간별 이동시간(차/대중교통/도보)
+    if (course.stops?.length > 1) {
+      course.legs = await buildLegs(course.stops, process.env.KAKAO_REST_KEY, process.env.ODSAY_API_KEY)
     }
     res.status(200).json({ course })
   } catch (e) {
