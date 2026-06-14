@@ -187,14 +187,14 @@ export default function Home() {
   // 카테고리 전환(음식/여행지/숙소) — 태그·검색어 초기화(태그 칩이 그 종류로 바뀜). 실제 검색은 '필터 적용'/검색 때.
   const onKind = (k) => {
     if (k === kind) return
-    setKind(k); setTags([]); setQuery(''); setSuggests([])
+    setKind(k); setTags([]); setKeyword(''); setQuery(''); setSuggests([])
     if (k !== 'food') setPrice(0) // 가격은 음식만
   }
 
   // 지도 카테고리 버튼(음식/여행지/숙소) → 그 카테고리로 전환 + 현재 영역 검색 (1탭)
   const onAreaSearch = (bbox, k = kind) => {
     const sameKind = k === kind
-    if (!sameKind) { setKind(k); setTags([]); setQuery(''); if (k !== 'food') setPrice(0) }
+    if (!sameKind) { setKind(k); setTags([]); setKeyword(''); setQuery(''); if (k !== 'food') setPrice(0) }
     triggerPeek()
     const px = sameKind ? price : (k === 'food' ? price : 0)
     setSearch((s) => ({ q: '', bbox, sort, lim: limit, price: px, tags: sameKind ? tags : [], kind: k, tick: s.tick + 1 }))

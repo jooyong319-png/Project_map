@@ -56,7 +56,8 @@ const LIMITS = [50, 100, 200]
 export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, onLimit, country, onCountry, city, onCity, area, onArea, keyword, onKeyword, price, onPrice, tags = [], onToggleTag, tagOptions = [], onRegionPick, pickedLabel }) {
   const [regionModal, setRegionModal] = useState(false)
   const isKorea = !country || country === '대한민국' // 태그 필터는 카카오(한국) 한정
-  const kws = KEYWORDS[country] || []
+  // 키워드: 한국이면 카테고리별(음식종류/궁궐·박물관/호텔·펜션…), 해외면 그 나라 키워드
+  const kws = isKorea ? (KINDS.find((k) => k.key === kind)?.keywords || []) : (KEYWORDS[country] || [])
   const cities = CITIES[country] || []
   const cityObj = cities.find((c) => c.name === city)
   const areas = cityObj?.areas || []
