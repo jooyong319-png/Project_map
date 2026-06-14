@@ -131,7 +131,7 @@ function ZoomWatcher({ onZoomOut, onZoom, onBounds, onMoving }) {
     },
     moveend() { report(map); onMoving && onMoving(false) },
   })
-  useEffect(() => { report(map) }, []) // 최초 1회
+  useEffect(() => { report(map); onZoom && onZoom(map.getZoom()) }, []) // 최초 1회(줌·영역 보고)
   return null
 }
 
@@ -162,7 +162,7 @@ function FlyToRegion({ target }) {
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, kind = 'food', limit = 10, initialCenter, initialZoom, course }) {
+export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, kind = 'food', limit = 10, initialCenter, initialZoom, course, onZoom }) {
   const courseStops = course?.stops || []
   const hasCourse = courseStops.length > 0
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
@@ -209,7 +209,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       <VectorBasemap />
       <FitBounds points={points} skip={!!initialCenter} />
       <FocusOnSelect items={valid} selected={selected} />
-      <ZoomWatcher onZoomOut={onZoomOut} onZoom={setZoom} onBounds={onBounds} onMoving={onMoving} />
+      <ZoomWatcher onZoomOut={onZoomOut} onZoom={(z) => { setZoom(z); onZoom && onZoom(z) }} onBounds={onBounds} onMoving={onMoving} />
       <FlyToLoc loc={myLoc} />
       <FlyToRegion target={flyTarget} />
       <FitCourse stops={courseStops} />

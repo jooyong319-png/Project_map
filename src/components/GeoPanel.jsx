@@ -5,7 +5,7 @@ import { DEFAULT_REGION } from '../data/countries.js'
 
 // 지구본에서 지역 핀을 클릭하거나 확대하면 그 지역 지도가 열리고(+ 맛집 검색),
 // 지도를 충분히 축소하면 다시 지구본으로 돌아온다.
-export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onReset, onBounds, onMoving, navTo, loading, limit, kind, course, courseLoading, onCourse, onClearCourse }) {
+export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onReset, onBounds, onMoving, onZoom, navTo, loading, limit, kind, course, courseLoading, onCourse, onClearCourse }) {
   const [view, setView] = useState('globe') // 'globe' | 'map'
   const [globeStart, setGlobeStart] = useState(null) // { center:[lng,lat], scale }
   const [mapStart, setMapStart] = useState(null) // { center:[lat,lng], zoom }
@@ -118,6 +118,7 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
             onSearchArea={onAreaSearch}
             onBounds={onBounds}
             onMoving={onMoving}
+            onZoom={onZoom}
             myLoc={myLoc}
             flyTarget={mapFly}
             searching={loading}

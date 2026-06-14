@@ -57,20 +57,24 @@ header {
 .hdr-ai { display: inline-flex; align-items: center; gap: 6px; height: 42px; padding: 0 15px; border: none; border-radius: 12px; background: var(--grad); color: #fff; font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 2px 8px rgba(232, 84, 58, .3); transition: transform .12s, box-shadow .12s, filter .12s; white-space: nowrap; }
 .hdr-ai:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .hdr-ai.on { filter: brightness(.95); }
-.course-pop-backdrop { position: fixed; inset: 0; z-index: 90; }
+.hdr-ai-mini { display: none; font-weight: 800; }
+/* 다른 모달과 통일: 데스크탑=가운데 모달, 모바일=하단 시트(아래에서 올라옴) */
+.course-pop-backdrop { position: fixed; inset: 0; z-index: 1100; background: rgba(20, 18, 15, .42); animation: fadeIn .15s ease; }
 .course-pop {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 100;
-  width: 320px; max-width: 90vw; max-height: min(560px, 80vh); overflow-y: auto;
-  background: #fff; border-radius: 14px;
-  box-shadow: var(--shadow-lg); border: 1px solid var(--line); padding: 14px;
-  animation: coursein .18s ease;
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1101;
+  width: 380px; max-width: 92vw; max-height: 82vh; overflow-y: auto;
+  background: #fff; border-radius: 18px;
+  box-shadow: var(--shadow-lg); border: 1px solid var(--line); padding: 16px;
+  animation: regionIn .18s ease both;
 }
-.course-pop::before { content: ''; position: absolute; top: -6px; right: 22px; width: 12px; height: 12px; background: #fff; border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
 .cl-field-label { font-size: 12px; font-weight: 800; color: #555; margin: 16px 0 7px; }
 .course-pop > .cl-field-label:first-child { margin-top: 0; }
 .cl-field-label span { font-weight: 500; color: #aaa; font-size: 11px; margin-left: 3px; }
-.cl-loc-opt { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface); color: #333; font-weight: 700; font-size: 13.5px; padding: 10px 12px; border-radius: 10px; cursor: pointer; margin-bottom: 8px; transition: background .12s, color .12s, border-color .12s, box-shadow .12s; }
+.cl-loc-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface); color: #333; font-weight: 700; font-size: 13.5px; padding: 10px 12px; border-radius: 10px; cursor: pointer; margin-bottom: 8px; transition: background .12s, color .12s, border-color .12s, box-shadow .12s; }
 .cl-loc-opt.on { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(232, 84, 58, .28); }
+.cl-loc-opt:disabled { cursor: default; background: #f6f6f8; border-style: dashed; color: #b3b3b8; }
+.cl-loc-main { font-weight: 700; }
+.cl-loc-hint { font-size: 11px; font-weight: 500; color: #adadb4; }
 .cl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .cl-submit { width: 100%; margin-top: 16px; border: none; border-radius: 12px; background: var(--grad); color: #fff; font-weight: 800; font-size: 14.5px; padding: 13px; cursor: pointer; box-shadow: 0 2px 10px rgba(232, 84, 58, .3); transition: transform .12s, filter .12s; }
 .cl-submit:hover:not(:disabled) { transform: translateY(-1px); }
@@ -78,10 +82,22 @@ header {
 .cl-chip { border: 1px solid var(--line); background: var(--surface); color: #444; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 .cl-chip:hover { background: var(--grad); color: #fff; border-color: transparent; }
 @media (max-width: 760px) {
-  .hdr-ai-label { display: none; }
-  .hdr-ai { padding: 0 13px; }
-  .course-pop { right: auto; left: 0; }
+  .hdr-ai-label, .hdr-ai-ic { display: none; } /* 모바일: 이모지 대신 'AI' 텍스트 */
+  .hdr-ai-mini { display: inline; }
+  .hdr-ai { padding: 0 15px; }
+  /* 리스트 시트처럼 화면 아래에서 슬라이드 업 */
+  .course-pop {
+    left: 0; right: 0; top: auto; bottom: 0; transform: none;
+    width: 100%; max-width: none; max-height: 86vh;
+    border-radius: 20px 20px 0 0; padding: 0 16px 18px;
+    box-shadow: 0 -8px 30px rgba(25, 22, 18, .18);
+    animation: courseSheetUp .3s cubic-bezier(.4, 0, .2, 1) both;
+  }
+  /* 시트 상단 그립 바 */
+  .course-pop::before { content: ''; display: block; width: 44px; height: 5px; border-radius: 999px; background: #d4d4da; margin: 10px auto 8px; }
+  .course-pop > .cl-field-label:first-of-type { margin-top: 4px; }
 }
+@keyframes courseSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
 /* 종류 세그먼트(음식/여행지/숙소) */
 .kind-seg { display: inline-flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; box-shadow: var(--shadow-sm); }

@@ -34,6 +34,7 @@ export default function Home() {
   const [filtersOpen, setFiltersOpen] = useState(false) // 모바일: 검색·필터 전체 접기/펼치기
   const [peek, setPeek] = useState(false) // 검색 시 잠깐 패널 반투명(지도 들여다보기)
   const [mapMoving, setMapMoving] = useState(false) // 지도 이동/줌 중 → 리스트·상세 반투명
+  const [mapZoom, setMapZoom] = useState(0) // 현재 지도 줌(지구본=0). '지금 보고 있는 지역' 활성 조건용
   const peekTimer = useRef(null)
   const mapBoundsRef = useRef(null) // 현재 지도 영역(검색 기준)
   const pendingSearchRef = useRef(null) // 지역 이동 후 자동 검색 예약 {q}
@@ -216,7 +217,7 @@ export default function Home() {
   const onCourse = async (bbox, theme = '') => {
     setCourseLoading(true)
     setCourse(null)
-    triggerPeek()
+    setSheet('full') // 모바일: 코스 결과가 바로 보이게 시트 끝까지 올림
     try {
       const c = await getCourse(bbox, theme)
       if (!c || !c.stops?.length) {
@@ -334,6 +335,7 @@ export default function Home() {
     setOpenItem(null)
     setCourse(null)
     setCourseLoading(false)
+    setMapZoom(0)
     mapBoundsRef.current = null
   }
 
@@ -371,9 +373,10 @@ export default function Home() {
           aria-expanded={courseLauncher}
           title="AI 코스 짜기"
         >
-          🧭 <span className="hdr-ai-label">AI 코스</span>
+          <span className="hdr-ai-ic">🧭</span>
+          <span className="hdr-ai-label">AI 코스</span>
+          <span className="hdr-ai-mini">AI</span>
         </button>
-        {courseLauncher && <CourseLauncher onLaunch={launchCourse} onUseCurrent={onCourseHere} hasCurrent={!!mapBoundsRef.current} onClose={() => setCourseLauncher(false)} />}
       </div>
       <button
         className={`hdr-filter ${filtersOpen ? 'on' : ''}`}
@@ -389,6 +392,16 @@ export default function Home() {
   return (
     <>
       {headerSlot && createPortal(searchBar, headerSlot)}
+
+      {/* AI 코스 런처 — 헤더 backdrop-filter 영향을 피해 본문에서 렌더(fixed 가 뷰포트 기준이 되게) */}
+      {courseLauncher && (
+        <CourseLauncher
+          onLaunch={launchCourse}
+          onUseCurrent={onCourseHere}
+          hasCurrent={!!mapBoundsRef.current && mapZoom >= 12}
+          onClose={() => setCourseLauncher(false)}
+        />
+      )}
 
       {filtersOpen && <div className="filter-backdrop" onClick={() => setFiltersOpen(false)} />}
       <div className={`filterpanel ${filtersOpen ? 'open' : ''}`}>
@@ -473,7 +486,7 @@ export default function Home() {
             </>
           )}
         </div>
-        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onReset={onReset} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} kind={kind} course={course} courseLoading={courseLoading} onCourse={onCourse} onClearCourse={onClearCourse} />
+        <GeoPanel items={mapItems} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onReset={onReset} onBounds={onBoundsChange} onMoving={setMapMoving} onZoom={setMapZoom} navTo={navTo} loading={loading} limit={limit} kind={kind} course={course} courseLoading={courseLoading} onCourse={onCourse} onClearCourse={onClearCourse} />
         <DetailModal data={openItem} onClose={() => setOpenItem(null)} onBookmark={onBookmark} bookmarked={openItem ? bookmarks.includes(openItem.id) : false} sheet="half" />
       </div>
     </>
