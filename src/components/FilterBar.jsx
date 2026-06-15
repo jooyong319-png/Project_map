@@ -50,8 +50,8 @@ const TAG_DESC = {
   휴양지: '쉬기 좋은', 가성비: '가성비', 애견동반: '반려견 OK', 호캉스: '호캉스', 럭셔리: '고급',
 }
 
-// reviews·rating = 구글 신호 / popular(네이버 인기)·old(노포, 인허가 오래된순) = 구글 무관 자체 신호
-const SORTS = [['reviews', '리뷰 많은순'], ['rating', '평점 높은순'], ['popular', '인기순'], ['old', '노포순']]
+// 전국 라이브(카카오)에서 항상 작동하는 구글 신호 기준만 노출. (인기/노포는 베이스 깐 지역만 데이터가 있어 제외)
+const SORTS = [['reviews', '리뷰 많은순'], ['rating', '평점 높은순']]
 const LIMITS = [50, 100, 200]
 
 export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, onLimit, country, onCountry, city, onCity, area, onArea, keyword, onKeyword, price, onPrice, tags = [], onToggleTag, tagOptions = [], onRegionPick, pickedLabel }) {

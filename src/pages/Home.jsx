@@ -121,13 +121,11 @@ export default function Home() {
     let r = showingSaved ? savedItems : items
     // '전체'는 음식·여행지·숙소 인터리브 순서 유지(정렬하면 한 종류로 쏠림)
     if (search.kind !== 'all') {
-      const s = search.sort
-      const metric = s === 'rating' ? (a, b) => b.rating - a.rating || b.reviews - a.reviews
-        : s === 'popular' ? (a, b) => (b.blog || 0) - (a.blog || 0)               // 네이버 인기(구글 무관)
-        : s === 'old' ? (a, b) => (a.licensed || '9999').localeCompare(b.licensed || '9999') // 노포(인허가 오래된순)
+      const metric = search.sort === 'rating'
+        ? (a, b) => b.rating - a.rating || b.reviews - a.reviews
         : (a, b) => b.reviews - a.reviews                                          // 기본: 리뷰 많은순
-      // 옵션 B '맛집 우선표시': 맛집 태그 > 신호(평점·블로그) 보유 > raw 베이스 순 티어.
-      // 공공데이터 전수를 깔되, 선별 안 된 raw 가 위로 올라오지 않게 한다(표시 limit 과 결합).
+      // 맛집 우선표시(보이지 않는 정렬): 베이스 깐 지역(강남)에서 맛집 태그>신호 보유>raw 순.
+      //  다른 지역(라이브)은 태그 없어 평점/리뷰순 그대로 → 전국 UX 일관.
       const tier = (x) => (x.tags?.includes('맛집') ? 2 : ((x.rating > 0 || x.blog > 0) ? 1 : 0))
       r = [...r].sort((a, b) => tier(b) - tier(a) || metric(a, b))
     }
@@ -153,7 +151,7 @@ export default function Home() {
     if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' } // 키워드 검색
     // 기본(지역 검색): 종류 N곳 + 무슨 필터가 적용됐는지
     const f = []
-    if (search.kind !== 'all') f.push({ rating: '평점 높은순', popular: '인기순', old: '노포순' }[search.sort] || '리뷰 많은순') // 전체는 정렬 안 함
+    if (search.kind !== 'all') f.push(search.sort === 'rating' ? '평점 높은순' : '리뷰 많은순') // 전체는 정렬 안 함
     if (search.tags?.length) f.push(search.tags.join('·'))
     if (search.price) f.push(PRICE_LABEL[search.price])
     return { prefix: noun[search.kind] || '장소', suffix: `${search.lim}곳`, meta: f.join(' · ') }
