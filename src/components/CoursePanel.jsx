@@ -70,6 +70,21 @@ export default function CoursePanel({ course, loading, selected, onSelectStop, o
               </Fragment>
             ))}
           </div>
+          {course.lodging && (
+            <a
+              className="course-lodging"
+              href={course.lodging.url}
+              target="_blank"
+              rel="noopener noreferrer sponsored"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                margin: '12px 0 4px', padding: '12px', borderRadius: 12, fontWeight: 700,
+                background: '#7c5cff', color: '#fff', textDecoration: 'none',
+              }}
+            >
+              🏨 {course.lodging.label}
+            </a>
+          )}
           {course.note === 'auto' && <div className="course-note">※ AI 응답이 늦어 자동으로 구성했어요</div>}
         </>
       )}

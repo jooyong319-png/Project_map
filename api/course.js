@@ -184,6 +184,24 @@ async function buildLegs(stops, kkey, okey) {
   }))
 }
 
+// ===== 숙박 어필리에이트 (목표 2: 코스 근처 숙소 예약 → 수수료) =====
+// 코스 중심 좌표로 OTA 예약 검색 딥링크를 만든다. 제휴사 무관: env STAY_AFF_LINK 에
+// 제휴사가 준 링크 형식을 넣으면 {lat}{lng}{area}{checkin}{checkout} 를 채워준다.
+//  예) 부킹: https://www.booking.com/searchresults.html?aid=YOUR_AID&latitude={lat}&longitude={lng}
+//  STAY_AFF_LINK 미설정 시 숙박 블록 생략(제휴 승인 전엔 자동 비활성).
+function buildLodging(stops, area) {
+  const tmpl = process.env.STAY_AFF_LINK
+  const pts = (stops || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+  if (!tmpl || !pts.length) return null
+  const lat = (pts.reduce((s, p) => s + p.lat, 0) / pts.length).toFixed(5)
+  const lng = (pts.reduce((s, p) => s + p.lng, 0) / pts.length).toFixed(5)
+  const url = tmpl
+    .replace(/\{lat\}/g, lat).replace(/\{lng\}/g, lng)
+    .replace(/\{area\}/g, encodeURIComponent(area || ''))
+    .replace(/\{checkin\}/g, '').replace(/\{checkout\}/g, '')
+  return { lat: +lat, lng: +lng, url, label: '이 코스 근처 숙소 예약하기' }
+}
+
 // 좌표 배열 파싱 (문자열 "w,s,e,n" → [.. ] 또는 null)
 function parseBbox(v) {
   const a = (v || '').toString().split(',').map(Number)
@@ -251,6 +269,9 @@ export default async function handler(req, res) {
     if (course.stops?.length > 1) {
       course.legs = await buildLegs(course.stops, process.env.KAKAO_REST_KEY, process.env.ODSAY_API_KEY)
     }
+    // 숙박 어필리에이트 — 코스 근처 숙소 예약 링크(제휴 승인+STAY_AFF_LINK 설정 시 활성)
+    const lodging = buildLodging(course.stops, course.title)
+    if (lodging) course.lodging = lodging
     res.status(200).json({ course })
   } catch (e) {
     res.status(200).json({ course: null, error: String(e) })
