@@ -624,13 +624,13 @@ header {
 
   .list-toggle { display: none; } /* 모바일은 핸들로 대체 */
 
-  /* 상세 시트 — 화면 절반 정도 높이로 열림(아래에서 슬라이드 업), 위를 덮음 */
+  /* 상세 시트 — 리스트 디폴트(중간)와 비슷한 높이로 열림(아래에서 슬라이드 업), 위를 덮음 */
   .detail-panel, .wrap.collapsed .detail-panel {
     top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-width: none;
-    height: 45%; max-height: 80%; border-radius: 20px 20px 0 0; z-index: 25;
+    height: 52%; max-height: 80%; border-radius: 20px 20px 0 0; z-index: 25;
     box-shadow: 0 -8px 30px rgba(25, 22, 18, .22);
     transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .2s ease;
-    transform: translateY(50%);
+    transform: translateY(0); /* 시트 전체가 보이게(=화면 ~52%). 이전 translateY(50%)는 절반만 보여 너무 작았음 */
   }
 
   /* 검색은 항상 위 + 작은 '필터' 버튼(검색 오른쪽, 한 줄) */
