@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/place/:id", "destination": "/api/place-page?id=:id" },
     { "source": "/((?!api/).*)", "destination": "/" }
   ],
   "crons": [
