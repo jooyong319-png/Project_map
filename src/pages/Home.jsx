@@ -72,15 +72,18 @@ export default function Home() {
     const fetcher = search.curation
       ? getCuration()
       : getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim, tags: search.tags, kind: search.kind })
-    fetcher.then(({ items, source }) => {
+    fetcher.then(({ items, source, center }) => {
       const wait = Math.max(0, 900 - (Date.now() - start))
       setTimeout(() => {
         if (!active) return
         setItems(items)
         setSource(source)
         setLoading(false)
-        // 전국 텍스트 검색은 지도가 결과 위치로 따라가게 (안 그러면 지도는 딴 데 머물러 마커가 안 보임)
-        if (search.global && items.length) {
+        // 검색어에 지역명이 있어 그 동네로 이동한 경우(예 "개봉 전집") → 지도도 그쪽으로.
+        if (center && Number.isFinite(center.lng) && Number.isFinite(center.lat)) {
+          setNavTo({ center: [center.lng, center.lat], zoom: 14 })
+        } else if (search.global && items.length) {
+          // 전국 텍스트 검색은 지도가 결과 위치로 따라가게 (안 그러면 지도는 딴 데 머물러 마커가 안 보임)
           const hit = items.find((i) => Number.isFinite(i.lng) && Number.isFinite(i.lat))
           if (hit) setNavTo({ center: [hit.lng, hit.lat], zoom: 14 })
         }
@@ -118,8 +121,15 @@ export default function Home() {
     let r = showingSaved ? savedItems : items
     // '전체'는 음식·여행지·숙소 인터리브 순서 유지(정렬하면 한 종류로 쏠림)
     if (search.kind !== 'all') {
-      if (search.sort === 'rating') r = [...r].sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)
-      else r = [...r].sort((a, b) => b.reviews - a.reviews) // 기본: 리뷰 많은순
+      const s = search.sort
+      const metric = s === 'rating' ? (a, b) => b.rating - a.rating || b.reviews - a.reviews
+        : s === 'popular' ? (a, b) => (b.blog || 0) - (a.blog || 0)               // 네이버 인기(구글 무관)
+        : s === 'old' ? (a, b) => (a.licensed || '9999').localeCompare(b.licensed || '9999') // 노포(인허가 오래된순)
+        : (a, b) => b.reviews - a.reviews                                          // 기본: 리뷰 많은순
+      // 옵션 B '맛집 우선표시': 맛집 태그 > 신호(평점·블로그) 보유 > raw 베이스 순 티어.
+      // 공공데이터 전수를 깔되, 선별 안 된 raw 가 위로 올라오지 않게 한다(표시 limit 과 결합).
+      const tier = (x) => (x.tags?.includes('맛집') ? 2 : ((x.rating > 0 || x.blog > 0) ? 1 : 0))
+      r = [...r].sort((a, b) => tier(b) - tier(a) || metric(a, b))
     }
     if (search.price) r = r.filter((d) => d.priceLevel === search.price) // 가격대 필터(가격 미상은 제외)
     return r.slice(0, search.lim)
@@ -143,7 +153,7 @@ export default function Home() {
     if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' } // 키워드 검색
     // 기본(지역 검색): 종류 N곳 + 무슨 필터가 적용됐는지
     const f = []
-    if (search.kind !== 'all') f.push(search.sort === 'rating' ? '평점 높은순' : '리뷰 많은순') // 전체는 정렬 안 함
+    if (search.kind !== 'all') f.push({ rating: '평점 높은순', popular: '인기순', old: '노포순' }[search.sort] || '리뷰 많은순') // 전체는 정렬 안 함
     if (search.tags?.length) f.push(search.tags.join('·'))
     if (search.price) f.push(PRICE_LABEL[search.price])
     return { prefix: noun[search.kind] || '장소', suffix: `${search.lim}곳`, meta: f.join(' · ') }

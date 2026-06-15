@@ -103,7 +103,8 @@ export default async function handler(req, res) {
 
   let places = list.map((p) => ({
     id: p.id, name: p.name, region: p.region, cat: p.cat, lng: p.lng, lat: p.lat,
-    icon: p.icon, place_url: p.place_url, tags: p.tags || [], blog: p.blog || 0, rating: 0, reviews: 0,
+    icon: p.icon, place_url: p.place_url, tags: p.tags || [], blog: p.blog || 0, licensed: p.licensed || '',
+    rating: 0, reviews: 0,
     price: '', priceLevel: 0, photo: null, openNow: null, reviews_list: [], phone: '', gid: null, source: 'kakao',
   }))
 

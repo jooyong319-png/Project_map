@@ -87,7 +87,7 @@ export async function getRestaurants(query = '', opts = {}) {
       const data = await res.json()
       if (data.fallback) continue // 키 없음 → 다음 소스로
       const items = Array.isArray(data.places) ? data.places : []
-      return { items, source: items[0]?.source || 'google' }
+      return { items, source: items[0]?.source || 'google', center: data.center || null } // center: 지역검색 시 지도 이동용
     }
   } catch (_) {
     // 네트워크 오류 → 폴백

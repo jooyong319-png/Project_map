@@ -69,6 +69,30 @@ export async function enrichWithGoogle(item, gkey) {
   }
 }
 
+// 검색어 앞부분이 지역명(구/동)이면 그 지역 좌표+반경으로 바꾼다. "개봉 전집" → 개봉동으로 이동 + kw='전집'.
+//  · 현재 보던 지도영역(bbox)에 갇히지 않게, 지역이 인식되면 그 동네 rect 로 덮어쓴다.
+//  · 앞에서부터 최대 3토큰까지 지역 후보로 시도, 가장 긴 매칭 채택("강남구 논현동 파스타" 등).
+async function resolveRegion(kw, key) {
+  const toks = kw.split(/\s+/).filter(Boolean)
+  for (let n = Math.min(3, toks.length); n >= 1; n--) {
+    const cand = toks.slice(0, n).join(' ')
+    let doc
+    try {
+      const r = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?size=1&query=${encodeURIComponent(cand)}`, { headers: { Authorization: `KakaoAK ${key}` } })
+      if (!r.ok) continue
+      doc = (await r.json()).documents?.[0]
+    } catch (_) { continue }
+    const a = doc?.address
+    if (!a || (!a.region_2depth_name && !a.region_3depth_name)) continue
+    const dong = a.region_3depth_name || a.region_3depth_h_name || ''
+    const d = dong ? 0.02 : a.region_2depth_name ? 0.05 : 0.09 // 동 ~2km / 구 ~5km / 그 외 ~9km
+    const lng = Number(doc.x), lat = Number(doc.y)
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue
+    return { rect: `${lng - d},${lat - d},${lng + d},${lat + d}`, kw: toks.slice(n).join(' '), center: { lng, lat } }
+  }
+  return null
+}
+
 // 한 사각형(rect)에서 카카오 3페이지(최대 45) 수집.
 // full=true → 그 칸의 전체 매칭(total_count)이 45 초과 = 페이지로 못 가져오는 게 있음 → 쪼개야 함.
 async function fetchRect(base, params, rect, headers) {
@@ -113,12 +137,19 @@ export default async function handler(req, res) {
     res.status(200).json({ places: [], fallback: true })
     return
   }
-  const kw = (req.query?.q || '').toString().trim()
+  let kw = (req.query?.q || '').toString().trim()
   const bbox = (req.query?.bbox || '').toString()
   let rect = ''
   if (bbox) {
     const [w, s, e, n] = bbox.split(',').map(Number)
     if ([w, s, e, n].every(Number.isFinite)) rect = `${w},${s},${e},${n}` // 좌하단 X,Y → 우상단 X,Y
+  }
+  // 검색어 앞에 지역명("개봉", "강남구 논현동"…)이 있으면 그 동네로 이동(현재 화면 bbox 무시).
+  //  → "개봉 전집"을 강남 화면에서 쳐도 개봉동에서 전집을 찾는다. center 는 클라가 지도 이동에 쓰도록 반환.
+  let regionCenter = null
+  if (kw) {
+    const reg = await resolveRegion(kw, key)
+    if (reg) { rect = reg.rect; kw = reg.kw; regionCenter = reg.center }
   }
   // 영역(rect) 없고 키워드도 없으면 검색 불가
   if (!rect && !kw) { res.status(200).json({ places: [] }); return }
@@ -199,7 +230,7 @@ export default async function handler(req, res) {
     const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 60)
     if (gkey && enrichN > 0) places = await cachedEnrich(places, enrichN, (it) => enrichWithGoogle(it, gkey))
 
-    res.status(200).json({ places })
+    res.status(200).json({ places, center: regionCenter }) // center: 지역검색이면 클라가 지도 이동에 사용
   } catch (e) {
     res.status(200).json({ places: [], error: String(e) })
   }

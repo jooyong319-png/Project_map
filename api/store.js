@@ -127,3 +127,23 @@ export async function gcacheUpsert(map) {
   for (const id of ids) all[id] = map[id]
   fWrite(GCACHE_PATH, all)
 }
+
+// 구글 ToS 안전장치: 오래(기본 21일) 안 쓰여 갱신 안 된 캐시 row 삭제.
+//  · 쓰이는 row 는 14일(REFRESH_DAYS)에 재호출되며 at 이 갱신됨 → 21일 넘은 건 '안 쓰이는' 것.
+//  · 30일 하드리밋보다 한참 아래에서 비워, stale 데이터가 DB/파일에 영구히 남지 않게 한다.
+//  · 반환: 삭제한 row 수(supabase 는 -1, minimal 응답이라 개수 모름).
+export async function gcachePurge(maxAgeDays = 21) {
+  const cutoff = Date.now() - maxAgeDays * 24 * 3600 * 1000
+  if (usingSupabase()) {
+    const r = await fetch(`${sbUrl()}/rest/v1/gcache?at=lt.${cutoff}`, {
+      method: 'DELETE', headers: headers({ Prefer: 'return=minimal' }),
+    })
+    if (!r.ok) throw new Error(`gcachePurge ${r.status}: ${(await r.text()).slice(0, 200)}`)
+    return -1
+  }
+  const all = fRead(GCACHE_PATH, {})
+  let n = 0
+  for (const id of Object.keys(all)) if (!all[id]?.at || all[id].at < cutoff) { delete all[id]; n++ }
+  fWrite(GCACHE_PATH, all)
+  return n
+}
