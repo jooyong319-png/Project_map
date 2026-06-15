@@ -1,6 +1,8 @@
 {
   "rewrites": [
     { "source": "/place/:id", "destination": "/api/place-page?id=:id" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/robots.txt", "destination": "/api/robots" },
     { "source": "/((?!api/).*)", "destination": "/" }
   ],
   "crons": [

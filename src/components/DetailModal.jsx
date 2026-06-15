@@ -67,9 +67,14 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 1800) }
   const share = async () => {
+    // 우리 DB(카카오/공공데이터)에 있는 곳은 SEO·미리보기되는 /place/:id 를 공유(링크 확산→백링크).
+    // 구글 라이브 결과(우리 DB에 없음)는 지도 링크로 폴백.
+    const shareUrl = (data.source !== 'google' && data.id)
+      ? `${window.location.origin}/place/${encodeURIComponent(data.id)}`
+      : mapsUrl
     try {
-      if (navigator.share) await navigator.share({ title: data.name, url: mapsUrl })
-      else { await navigator.clipboard.writeText(mapsUrl); showToast('링크를 복사했어요') }
+      if (navigator.share) await navigator.share({ title: data.name, url: shareUrl })
+      else { await navigator.clipboard.writeText(shareUrl); showToast('링크를 복사했어요') }
     } catch (_) {}
   }
   const copyPhone = async () => {
