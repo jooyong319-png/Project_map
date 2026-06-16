@@ -7,9 +7,9 @@
 // ⚠️ 파일 쓰기는 로컬(dev)에서만 — Vercel prod 는 읽기전용이라 매번 라이브로 폴백.
 
 import { enrichWithGoogle, catFromKakao, ICON_BY_CAT, KIND_ICON, catCodeOf } from './kakao.js'
-import { naverTags, matjipCutoff, isMatjip, dongOf, topTagOf } from './naver.js'
-import { cachedEnrich } from './gcache.js'
-import { seedAll, seedUpsert, scannedAll, scannedAdd } from './store.js'
+import { naverTags, matjipCutoff, isMatjip, dongOf, topTagOf } from '../lib/naver.js'
+import { cachedEnrich } from '../lib/gcache.js'
+import { seedAll, seedUpsert, scannedAll, scannedAdd } from '../lib/store.js'
 
 const LIVE_MAX = 36 // 라이브 스캔 때 태깅할 최대 가게 수(비용 상한)
 

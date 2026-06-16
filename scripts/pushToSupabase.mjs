@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { normName } from '../api/naver.js'
+import { normName } from '../lib/naver.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -26,7 +26,7 @@ function loadEnv() {
 }
 loadEnv()
 
-const { seedAll, seedUpsert, usingSupabase } = await import('../api/store.js')
+const { seedAll, seedUpsert, usingSupabase } = await import('../lib/store.js')
 
 const dedupKey = (p) => `${normName(p.name || '')}@${Number(p.lat).toFixed(3)},${Number(p.lng).toFixed(3)}`
 

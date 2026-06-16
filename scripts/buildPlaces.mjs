@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { parse } from 'csv-parse'
 import proj4 from 'proj4'
 import { catFromKakao, ICON_BY_CAT } from '../api/kakao.js'
-import { seedUpsert } from '../api/store.js'
+import { seedUpsert } from '../lib/store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')

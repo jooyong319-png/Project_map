@@ -5,8 +5,8 @@
 // 호출:  GET /api/course?bbox=서,남,동,북
 // 환경변수: GEMINI_API_KEY (없으면 폴백), GEMINI_MODEL(선택, 기본 gemini-2.5-flash)
 
-import { seedAll } from './store.js'
-import { cachedEnrich } from './gcache.js'
+import { seedAll } from '../lib/store.js'
+import { cachedEnrich } from '../lib/gcache.js'
 import { enrichWithGoogle } from './kakao.js'
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'

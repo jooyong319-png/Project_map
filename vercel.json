@@ -4,8 +4,5 @@
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/robots.txt", "destination": "/api/robots" },
     { "source": "/((?!api/).*)", "destination": "/" }
-  ],
-  "crons": [
-    { "path": "/api/purge", "schedule": "0 3 * * *" }
   ]
 }

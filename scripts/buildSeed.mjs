@@ -10,8 +10,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { catFromKakao, ICON_BY_CAT, KIND_ICON, catCodeOf } from '../api/kakao.js'
-import { naverTags, matjipCutoff, isMatjip, dongOf, topTagOf } from '../api/naver.js'
-import { seedAll, seedUpsert, scannedAll, scannedAdd, usingSupabase } from '../api/store.js'
+import { naverTags, matjipCutoff, isMatjip, dongOf, topTagOf } from '../lib/naver.js'
+import { seedAll, seedUpsert, scannedAll, scannedAdd, usingSupabase } from '../lib/store.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')

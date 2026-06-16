@@ -25,12 +25,12 @@ export function catFromKakao(name = '') {
   return '기타'
 }
 
-import { cachedEnrich } from './gcache.js'
-import { seedByIds } from './store.js'
+import { cachedEnrich } from '../lib/gcache.js'
+import { seedByIds } from '../lib/store.js'
 
 // 카카오 가게를 구글에 이름+좌표로 매칭해 평점·사진을 가져온다 (표시용).
 // (구글 키 있을 때만, 좌표가 ~300m 내로 맞을 때만 채택)
-// 태그는 네이버 블로그(api/naver.js)로 따로 판정한다 — 여긴 평점·사진만.
+// 태그는 네이버 블로그(lib/naver.js)로 따로 판정한다 — 여긴 평점·사진만.
 export async function enrichWithGoogle(item, gkey) {
   try {
     const body = {
