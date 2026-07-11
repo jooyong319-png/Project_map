@@ -46,10 +46,13 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
-        setMyLoc([lat, lng])
         setLocating(false)
-        if (view === 'globe') enterWithFly([lng, lat], () => openRegion({ center: [lng, lat], zoom: 15 }))
-        // 지도면 MapView 의 FlyToLoc 가 이동
+        if (view === 'globe') {
+          // 지도 진입 후 myLoc 을 세팅해야 FlyToLoc 가 오프셋 이동(파란 점이 패널에 안 가림)
+          enterWithFly([lng, lat], () => { openRegion({ center: [lng, lat], zoom: 15 }); setMyLoc([lat, lng]) })
+        } else {
+          setMyLoc([lat, lng]) // 지도면 FlyToLoc 가 오프셋 이동
+        }
       },
       () => { setLocating(false); alert('위치를 가져오지 못했어요. 권한을 허용했는지 확인해 주세요.') },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },

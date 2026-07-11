@@ -71,7 +71,7 @@ export default function Home() {
     const start = Date.now()
     const fetcher = search.curation
       ? getCuration()
-      : getRestaurants(search.q, { bbox: search.bbox, global: search.global, limit: search.lim, tags: search.tags, kind: search.kind })
+      : getRestaurants(search.q, { bbox: search.bbox, global: search.global, forceGoogle: search.google, regionTerm: search.regionTerm, limit: search.lim, tags: search.tags, kind: search.kind })
     fetcher.then(({ items, source, center }) => {
       const wait = Math.max(0, 900 - (Date.now() - start))
       setTimeout(() => {
@@ -176,7 +176,7 @@ export default function Home() {
     if (pendingSearchRef.current) {
       const p = pendingSearchRef.current
       pendingSearchRef.current = null
-      commitSearch(b, p.q)
+      commitSearch(b, p.q, false, !!p.google)
     }
   }
 
@@ -216,9 +216,9 @@ export default function Home() {
     peekTimer.current = setTimeout(() => setPeek(false), 2200)
   }
   // 검색 커밋 (현재 검색어/필터 + bbox 로). 이걸 호출할 때만 실제 검색이 일어난다.
-  const commitSearch = (bbox = null, qOverride, global = false) => {
+  const commitSearch = (bbox = null, qOverride, global = false, forceGoogle = false, regionTerm = '') => {
     triggerPeek()
-    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, global, sort, lim: limit, price, tags, kind, tick: s.tick + 1 }))
+    setSearch((s) => ({ q: qOverride ?? query.trim(), bbox, global, google: forceGoogle, regionTerm, sort, lim: limit, price, tags, kind, tick: s.tick + 1 }))
   }
 
   // 카테고리 전환(음식/여행지/숙소) — 태그·검색어 초기화(태그 칩이 그 종류로 바뀜). 실제 검색은 '필터 적용'/검색 때.
@@ -318,12 +318,41 @@ export default function Home() {
 
   // 검색 버튼/Enter → 전국 구글 의미검색(결과 리스트). 보는 화면에 안 갇히고, 자동선택도 안 함.
   // (특정 가게로 바로 가고 싶으면 자동완성에서 클릭하면 됨)
-  const runTextSearch = () => {
+  const runTextSearch = async () => {
     const q = query.trim()
     suppressSuggestRef.current = true // 검색 후 자동완성(미리보기) 안 뜨게
     setSuggests([])
     if (!q) { const b = mapBoundsRef.current; if (b) commitSearch(b, '') ; return } // 빈 검색 → 현재 영역
-    commitSearch(null, q, true) // 전국 구글 검색 → 리스트
+
+    const tokens = q.split(/\s+/).filter(Boolean)
+    // ① "근처/주변 + 키워드" → 지금 보는 지도 영역에서 그 키워드 검색
+    const NEAR = /^(근처|주변|내\s*근처|이\s*근처|가까운|가까이)\s*/
+    if (NEAR.test(q)) {
+      const kw = q.replace(NEAR, '').trim()
+      const b = mapBoundsRef.current
+      if (b) { commitSearch(b, kw, false, true); return } // 현재 영역에서 구글 텍스트검색(장르 정확)
+    }
+    // ② "지역 + 키워드" → 지역이 지오코딩되면 그 동네로 날아가 그 영역에서 구글 텍스트검색(장르 정확)
+    if (tokens.length >= 2) {
+      for (let i = tokens.length - 1; i >= Math.max(1, tokens.length - 3); i--) {
+        const region = tokens.slice(0, i).join(' ')
+        const kw = tokens.slice(i).join(' ')
+        try {
+          const r = await fetch(`/api/geocode?q=${encodeURIComponent(region)}`)
+          const hit = (await r.json()).results?.[0]
+          if (hit) {
+            // 지도 줌(좁음)에 안 갇히게, 지역 크기에 맞춘 넉넉한 박스로 구글 검색
+            const pad = hit.zoom >= 15 ? 0.025 : hit.zoom >= 13 ? 0.06 : 0.12
+            const sb = [hit.lng - pad, hit.lat - pad, hit.lng + pad, hit.lat + pad]
+            setNavTo({ center: [hit.lng, hit.lat], zoom: Math.max(12, hit.zoom - 2) })
+            commitSearch(sb, kw, false, true, tokens[i - 1]) // 그 영역 구글검색 + 그 지역명(개봉) 주소필터
+            return
+          }
+        } catch (_) {}
+      }
+    }
+    // ③ 그 외(가게 이름/브랜드 등) → 전국 구글 의미검색
+    commitSearch(null, q, true)
   }
   // 필터 패널의 '필터 적용' → 선택 지역으로 이동 + 그 지역에서 검색 + 패널 닫기
   const applyFilters = () => {

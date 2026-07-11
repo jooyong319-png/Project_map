@@ -42,6 +42,32 @@ header {
 }
 .btn-login:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
+/* 유저 칩 + 드롭다운 */
+.user-menu { position: relative; }
+.user-chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px 4px 4px; box-shadow: var(--shadow-sm); cursor: pointer; transition: box-shadow .12s; }
+.user-chip:hover { box-shadow: var(--shadow-md); }
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: #e9e9ef; }
+.user-avatar.ph { display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; background: var(--grad); }
+.user-name { font-size: 13.5px; font-weight: 600; color: #333; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+.user-dropdown { position: absolute; right: 0; top: calc(100% + 8px); z-index: 41; min-width: 160px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px; animation: panelDown .16s ease; }
+.user-dd-item { display: block; width: 100%; text-align: left; border: none; background: none; padding: 10px 12px; border-radius: 8px; font-size: 14px; color: #333; cursor: pointer; }
+.user-dd-item:hover { background: #f5f5f7; }
+
+/* 로그인 모달 */
+.login-backdrop { position: fixed; inset: 0; z-index: 1200; background: rgba(20, 18, 15, .45); animation: fadeIn .15s ease; }
+.login-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1201; width: 360px; max-width: 92vw; background: #fff; border-radius: 20px; box-shadow: var(--shadow-lg); padding: 28px 24px 20px; animation: regionIn .18s ease both; }
+.login-close { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border: none; border-radius: 999px; background: #f1f1f3; color: #666; font-size: 20px; line-height: 1; cursor: pointer; }
+.login-head { text-align: center; margin-bottom: 20px; }
+.login-logo { font-size: 22px; font-weight: 800; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.login-sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.login-btns { display: flex; flex-direction: column; gap: 10px; }
+.login-btn { display: flex; align-items: center; justify-content: center; gap: 9px; border: none; border-radius: 12px; padding: 13px; font-size: 14.5px; font-weight: 700; cursor: pointer; transition: transform .1s, box-shadow .1s; }
+.login-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.login-btn.bordered { border: 1px solid var(--line); }
+.login-btn-ic { font-size: 15px; font-weight: 800; width: 18px; text-align: center; }
+.login-foot { font-size: 11px; color: #b0b0b6; text-align: center; margin-top: 16px; line-height: 1.5; }
+
 /* 헤더 안 검색바(포털) */
 .header-search-slot { flex: 1 1 auto; display: flex; justify-content: center; min-width: 0; }
 .header-search-wrap { display: flex; align-items: center; gap: 8px; flex: 1 1 500px; max-width: 540px; }
@@ -455,7 +481,11 @@ header {
   .area-seg-btn { padding: 7px 9px; font-size: 12px; }
   .area-bubble { font-size: 11px; }
 }
-.wrap.detail-open .area-search-wrap { display: none; }
+/* 상세 열리면(웹) 검색 버튼이 왼쪽 리스트/상세 패널에 안 가리게 오른쪽(보이는 지도 영역 가운데)으로 이동.
+   모바일(상세=아래 시트)은 가운데 유지하므로 데스크탑 폭에서만 적용. */
+@media (min-width: 761px) {
+  .wrap.detail-open .area-search-wrap { left: calc(50% + 357px); }
+}
 
 /* 🧭 AI 코스 짜기 */
 .course-fab {

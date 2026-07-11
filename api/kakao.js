@@ -188,9 +188,16 @@ export default async function handler(req, res) {
       lists.push(arr)
     }
     // 라운드로빈 인터리브(전체일 때 음식·여행지·숙소 균형있게 섞임)
-    const raw = []
+    let raw = []
     const maxLen = Math.max(0, ...lists.map((l) => l.length))
     for (let i = 0; i < maxLen; i++) for (const l of lists) if (l[i]) raw.push(l[i])
+    // 키워드 검색 정확도 보정: 이름/카테고리에 키워드가 든 곳을 맨 위로 정렬(카카오가 느슨히 섞은 것은 뒤로).
+    // 드롭하지 않고 정렬만 → 넓은 키워드("고기" 등)에서 관련 가게가 누락되지 않게.
+    if (isKeyword) {
+      const kwl = kw.toLowerCase()
+      const hit = (p) => (`${p.place_name || ''} ${p.category_name || ''}`).toLowerCase().includes(kwl) ? 0 : 1
+      raw = raw.map((p, i) => [p, i]).sort((a, b) => (hit(a[0]) - hit(b[0])) || (a[1] - b[1])).map(([p]) => p)
+    }
     let places = raw.map((p, i) => {
       const pk = CAT_KIND[p._cat] || kind // 이 가게의 종류(전체일 때 출처 카테고리 기준)
       const c = pk === 'food' ? catFromKakao(p.category_name) : (p.category_name?.split('>').pop()?.trim() || '')

@@ -65,7 +65,8 @@ export async function getRestaurants(query = '', opts = {}) {
     return { items: [], source: 'seed' }
   }
 
-  const useKakao = Array.isArray(bbox) && isKorea((bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2)
+  // forceGoogle: 한국이라도 구글 텍스트검색 사용(장르/의미 검색 정확도↑ — 엔터 검색의 지역+키워드에 쓰임)
+  const useKakao = !opts.forceGoogle && Array.isArray(bbox) && isKorea((bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2)
   const endpoints = useKakao ? ['/api/kakao', '/api/places'] : ['/api/places']
   // 키워드/카테고리를 따로 보내고, 실제 검색어 변환은 서버에서(전 세계 통하게)
   try {
@@ -86,7 +87,12 @@ export async function getRestaurants(query = '', opts = {}) {
       if (!res.ok) continue
       const data = await res.json()
       if (data.fallback) continue // 키 없음 → 다음 소스로
-      const items = Array.isArray(data.places) ? data.places : []
+      let items = Array.isArray(data.places) ? data.places : []
+      // 지역 한정: 주소에 그 지역명(예 "개봉")이 든 곳만 (개봉동만 보고 싶을 때). 비면 원래대로.
+      if (opts.regionTerm) {
+        const f = items.filter((i) => (i.region || '').includes(opts.regionTerm))
+        if (f.length) items = f
+      }
       return { items, source: items[0]?.source || 'google', center: data.center || null } // center: 지역검색 시 지도 이동용
     }
   } catch (_) {

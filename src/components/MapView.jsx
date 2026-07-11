@@ -135,14 +135,21 @@ function ZoomWatcher({ onZoomOut, onZoom, onBounds, onMoving }) {
   return null
 }
 
-// 내 위치가 바뀌면 그 좌표로 부드럽게 이동
+// 내 위치가 바뀌면 그 좌표로 부드럽게 이동 — 파란 점이 패널에 안 가리게 오프셋
+// (데스크탑: 왼쪽 리스트/상세 피해 오른쪽 / 모바일: 바텀시트 피해 위쪽). FocusOnSelect 와 동일 방식.
 // (마운트 시엔 안 움직이게 prev 를 현재 loc 으로 초기화 — 나라 이동 등으로 리마운트돼도 내 위치로 안 튐)
 function FlyToLoc({ loc }) {
   const map = useMap()
   const prev = useRef(loc)
   useEffect(() => {
     if (loc && loc !== prev.current) {
-      map.flyTo(loc, Math.max(map.getZoom(), 15), { duration: 0.8 })
+      const z = Math.max(map.getZoom(), 16)
+      const size = map.getSize()
+      const mp = map.project(loc, z)
+      let center = loc
+      if (size.x > 820) center = map.unproject(L.point(mp.x - LEFT_PANEL_PX / 2, mp.y), z) // 데스크탑: 오른쪽에
+      else center = map.unproject(L.point(mp.x, mp.y + size.y * 0.22), z) // 모바일: 위쪽에
+      map.flyTo(center, z, { duration: 0.8 })
     }
     prev.current = loc
   }, [loc, map])
