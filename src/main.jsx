@@ -5,6 +5,7 @@ import App from './App.jsx'
 import Home from './pages/Home.jsx'
 import Saved from './pages/Saved.jsx'
 import Privacy from './pages/Privacy.jsx'
+import AccountDelete from './pages/AccountDelete.jsx'
 import { AuthProvider } from './lib/auth.jsx'
 import './index.css'
 
@@ -18,6 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="/saved" element={<Saved />} />
           </Route>
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/account-delete" element={<AccountDelete />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
