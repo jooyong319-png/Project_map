@@ -4,6 +4,7 @@
 
 ---
 
+`[2026-07] app:` **앱 실기 테스트**(갤럭시 Z플립7, Android16). 커맨드라인 빌드로 APK 설치. 지구본·검색 정상. 카카오 로그인 딥링크 왕복 성공(외부브라우저→앱 복귀→세션). 버그수정: 앱은 로그인해도 리로드가 없어 로그인모달이 안 닫힘→user 생기면 닫기. **구글은 `disabled_client`(구글콘솔에서 OAuth클라 비활성됨, 웹도 동일영향)—재활성 필요, 우리코드 무관.** 네이버는 매직링크가 외부브라우저에 웹을 열어 앱복귀 안 됨→native=1 시 callback이 `kokkokkok://auth-callback?token_hash=`로 복귀, 앱에서 verifyOtp로 세션. adb가 자주 offline(Z플립 절전)→화면캡처(`screencap`)로 디버깅.
 `[2026-07] app:` **앱화 1단계** — Capacitor로 안드로이드 껍데기(앱ID `com.kokkokkok.app`). 웹뷰 소스=라이브 Vercel URL(옵션 B, `/api` 상대경로 재활용). 로그인 딥링크 전환: 앱=외부브라우저(`@capacitor/browser`)+`kokkokkok://auth-callback` 복귀→PKCE code교환, 웹=기존 리다이렉트. Supabase Redirect URLs에 딥링크 추가. **구글·카카오는 Supabase 콜백 그대로라 프로바이더 설정 변경 없음**(신규 안드로이드 클라/SHA-1 불필요). 네이버 앱로그인은 서버 딥링크복귀 필요→후속. 다음: JDK17+Android Studio로 폰 실기 테스트.
 `[2026-07] goal:` **다음 목표 = 앱화(출시).** 상세 [[다음-목표-앱화]]
 

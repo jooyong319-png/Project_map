@@ -88,6 +88,8 @@ export const useAuth = () => useContext(AuthCtx)
 export function userInfo(user) {
   const m = user?.user_metadata || {}
   const name = m.name || m.full_name || m.nickname || m.user_name || (user?.email ? user.email.split('@')[0] : '사용자')
-  const avatar = m.avatar_url || m.picture || m.profile_image || ''
+  let avatar = m.avatar_url || m.picture || m.profile_image || ''
+  // 카카오 프로필 이미지는 http:// 로 오는 경우가 있어 https 페이지(앱)에서 혼합콘텐츠로 차단됨 → https 승격
+  if (avatar.startsWith('http://')) avatar = 'https://' + avatar.slice(7)
   return { name, avatar }
 }

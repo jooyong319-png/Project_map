@@ -8,10 +8,12 @@ export default function Header() {
   const { user, loading, signOut } = useAuth()
   const [loginOpen, setLoginOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [avatarErr, setAvatarErr] = useState(false) // 아바타 이미지 로드 실패 → 이니셜 폴백
   const info = user ? userInfo(user) : null
 
   // 앱(딥링크)에선 로그인해도 페이지 리로드가 없어 모달이 그대로 남는다 → 로그인되면 닫기
   useEffect(() => { if (user) setLoginOpen(false) }, [user])
+  useEffect(() => { setAvatarErr(false) }, [user]) // 유저 바뀌면 아바타 에러 초기화
 
   return (
     <header>
@@ -25,8 +27,8 @@ export default function Header() {
           {loading ? null : user ? (
             <div className="user-menu">
               <button className="user-chip" onClick={() => setMenuOpen((o) => !o)}>
-                {info.avatar
-                  ? <img className="user-avatar" src={info.avatar} alt="" referrerPolicy="no-referrer" />
+                {info.avatar && !avatarErr
+                  ? <img className="user-avatar" src={info.avatar} alt="" referrerPolicy="no-referrer" onError={() => setAvatarErr(true)} />
                   : <span className="user-avatar ph">{info.name[0]}</span>}
                 <span className="user-name">{info.name}</span>
               </button>
