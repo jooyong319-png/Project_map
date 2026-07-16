@@ -23,7 +23,8 @@ function markGuestAiUsed() { try { localStorage.setItem(AI_FREE_KEY, aiToday()) 
 
 export default function Home() {
   const { user } = useAuth() // 로그인 유저 (AI 코스 게이팅용)
-  const [loginPrompt, setLoginPrompt] = useState(false) // 비로그인 시 AI 클릭 → 로그인 유도
+  const [loginPrompt, setLoginPrompt] = useState(false) // 비로그인 시 AI·즐겨찾기 → 로그인 유도
+  const [promptReason, setPromptReason] = useState('') // 로그인 유도 사유 문구
   const [kind, setKind] = useState('food') // 검색 종류: food/travel/stay
   const [headerSlot, setHeaderSlot] = useState(null) // 헤더의 검색바 포털 위치
   useEffect(() => { setHeaderSlot(document.getElementById('header-search-slot')) }, [])
@@ -174,7 +175,8 @@ export default function Home() {
   }, [showingSaved, search, course, courseLoading])
 
   const onBookmark = async (data) => {
-    await toggleBookmark(data)
+    const res = await toggleBookmark(data)
+    if (res && res.needLogin) { setPromptReason('즐겨찾기는 로그인 후 이용할 수 있어요 ⭐'); setLoginPrompt(true); return }
     setBookmarks(await getBookmarks())
     setSavedItems(await getSavedItems())
   }
@@ -459,7 +461,7 @@ export default function Home() {
       <div className="hdr-ai-wrap">
         <button
           className={`hdr-ai ${courseLauncher ? 'on' : ''}`}
-          onClick={() => { if (!user && guestAiUsedToday()) { setLoginPrompt(true); return } setCourseLauncher((o) => !o) }}
+          onClick={() => { if (!user && guestAiUsedToday()) { setPromptReason('오늘 무료 AI 코스를 다 썼어요. 로그인하면 계속 이용할 수 있어요 🧭'); setLoginPrompt(true); return } setCourseLauncher((o) => !o) }}
           aria-expanded={courseLauncher}
           title="AI 코스 짜기"
         >
@@ -497,7 +499,7 @@ export default function Home() {
 
       {/* 비로그인 상태에서 AI 코스 클릭 → 로그인 유도 */}
       {loginPrompt && createPortal(
-        <LoginModal reason="오늘 무료 AI 코스를 다 썼어요. 로그인하면 계속 이용할 수 있어요 🧭" onClose={() => setLoginPrompt(false)} />,
+        <LoginModal reason={promptReason} onClose={() => setLoginPrompt(false)} />,
         document.body,
       )}
 
