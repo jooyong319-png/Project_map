@@ -15,6 +15,12 @@ import { kindOf } from '../data/kinds.js'
 
 const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
 
+// AI 코스: 비로그인은 하루 1회 무료, 로그인은 무제한. 마지막 무료 사용 날짜를 localStorage에 기록.
+const AI_FREE_KEY = 'ai_free_date'
+const aiToday = () => new Date().toISOString().slice(0, 10) // YYYY-MM-DD (로컬 기준 날짜면 충분)
+function guestAiUsedToday() { try { return localStorage.getItem(AI_FREE_KEY) === aiToday() } catch { return false } }
+function markGuestAiUsed() { try { localStorage.setItem(AI_FREE_KEY, aiToday()) } catch {} }
+
 export default function Home() {
   const { user } = useAuth() // 로그인 유저 (AI 코스 게이팅용)
   const [loginPrompt, setLoginPrompt] = useState(false) // 비로그인 시 AI 클릭 → 로그인 유도
@@ -264,6 +270,7 @@ export default function Home() {
         return null
       }
       setCourse(c)
+      if (!user) markGuestAiUsed() // 비로그인: 오늘 무료 1회 소진
       return c
     } finally {
       setCourseLoading(false)
@@ -452,7 +459,7 @@ export default function Home() {
       <div className="hdr-ai-wrap">
         <button
           className={`hdr-ai ${courseLauncher ? 'on' : ''}`}
-          onClick={() => { if (!user) { setLoginPrompt(true); return } setCourseLauncher((o) => !o) }}
+          onClick={() => { if (!user && guestAiUsedToday()) { setLoginPrompt(true); return } setCourseLauncher((o) => !o) }}
           aria-expanded={courseLauncher}
           title="AI 코스 짜기"
         >
@@ -490,7 +497,7 @@ export default function Home() {
 
       {/* 비로그인 상태에서 AI 코스 클릭 → 로그인 유도 */}
       {loginPrompt && createPortal(
-        <LoginModal reason="AI 코스는 로그인 후 이용할 수 있어요 🧭" onClose={() => setLoginPrompt(false)} />,
+        <LoginModal reason="오늘 무료 AI 코스를 다 썼어요. 로그인하면 계속 이용할 수 있어요 🧭" onClose={() => setLoginPrompt(false)} />,
         document.body,
       )}
 
