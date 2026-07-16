@@ -65,13 +65,8 @@ export async function toggleBookmark(data) {
   return getBookmarks()
 }
 
-// 로그인 시: 게스트(localStorage) 즐겨찾기를 계정으로 병합 후 로컬 비움
+// 즐겨찾기는 이제 로그인 전용이라 게스트 localStorage 병합은 하지 않는다.
+// 과거 seedFeatured 로 남은 오래된 로컬 데이터(뚜쥬루 등)가 다시 계정으로 유입되지 않게 정리만.
 export async function mergeLocalFavorites() {
-  const uid = await currentUserId()
-  if (!uid) return
-  const local = lsGet()
-  if (!local.length) return
-  const rows = local.filter((d) => d?.id).map((d) => ({ user_id: uid, place_id: d.id, data: d }))
-  const { error } = await supabase.from('favorites').upsert(rows, { onConflict: 'user_id,place_id', ignoreDuplicates: true })
-  if (!error) lsSet([]) // 성공 시에만 로컬 비움
+  try { localStorage.removeItem(LS_KEY); localStorage.removeItem('matjip_seeded_v2') } catch {}
 }
