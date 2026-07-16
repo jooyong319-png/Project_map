@@ -23,6 +23,7 @@ function redirect(res, location, cookie) {
 function login(req, res) {
   const cid = process.env.NAVER_LOGIN_CLIENT_ID
   if (!cid) { res.statusCode = 500; res.end('naver login not configured'); return }
+  const native = req.query?.native === '1' // 앱(딥링크)에서 온 요청
   const redirectUri = `${originOf(req)}/api/auth/naver/callback`
   const state = crypto.randomUUID()
   const u = new URL('https://nid.naver.com/oauth2.0/authorize')
@@ -30,7 +31,13 @@ function login(req, res) {
   u.searchParams.set('client_id', cid)
   u.searchParams.set('redirect_uri', redirectUri)
   u.searchParams.set('state', state)
-  redirect(res, u.toString(), `nv_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`)
+  // 콜백까지 유지될 쿠키: state(CSRF) + native 여부
+  const cookies = [`nv_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`]
+  if (native) cookies.push('nv_native=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=600')
+  res.setHeader('Set-Cookie', cookies)
+  res.statusCode = 302
+  res.setHeader('Location', u.toString())
+  res.end()
 }
 
 // 네이버 콜백
@@ -60,10 +67,28 @@ async function callback(req, res) {
     const { error: cErr } = await admin.auth.admin.createUser({ email, email_confirm: true, user_metadata: meta })
     if (cErr && !/already|exist|registered/i.test(cErr.message)) return fail('user')
 
-    // 4) magiclink 액션링크로 세션 발급
+    // 4) magiclink 발급
     const { data, error: lErr } = await admin.auth.admin.generateLink({ type: 'magiclink', email, options: { redirectTo: origin } })
-    if (lErr || !data?.properties?.action_link) return fail('link')
-    redirect(res, data.properties.action_link, 'nv_state=; Path=/; Max-Age=0')
+    if (lErr || !data?.properties) return fail('link')
+
+    // 앱(딥링크): action_link(웹)로 보내면 세션이 브라우저에만 생김 →
+    // token_hash 를 딥링크로 앱에 넘겨 앱에서 verifyOtp 로 세션 생성.
+    const native = cookieVal(req.headers.cookie, 'nv_native') === '1'
+    const clear = ['nv_state=; Path=/; Max-Age=0', 'nv_native=; Path=/; Max-Age=0']
+    if (native) {
+      const th = data.properties.hashed_token
+      if (!th) return fail('link')
+      res.setHeader('Set-Cookie', clear)
+      res.statusCode = 302
+      res.setHeader('Location', `kokkokkok://auth-callback?token_hash=${encodeURIComponent(th)}&type=magiclink`)
+      res.end()
+      return
+    }
+    // 웹: 기존대로 action_link 로 세션 발급
+    res.setHeader('Set-Cookie', clear)
+    res.statusCode = 302
+    res.setHeader('Location', data.properties.action_link)
+    res.end()
   } catch (_) {
     fail('exception')
   }

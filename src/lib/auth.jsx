@@ -36,9 +36,12 @@ export function AuthProvider({ children }) {
       try {
         const u = new URL(url)
         const code = u.searchParams.get('code')
+        const tokenHash = u.searchParams.get('token_hash') // 네이버 커스텀 플로우
+        const type = u.searchParams.get('type') || 'magiclink'
         const errd = u.searchParams.get('error_description')
         if (errd) console.warn('[auth] oauth 오류:', errd)
-        if (code) await supabase.auth.exchangeCodeForSession(code) // PKCE 검증자는 앱 웹뷰 저장소에 있음
+        if (tokenHash) await supabase.auth.verifyOtp({ token_hash: tokenHash, type }) // 네이버: 토큰으로 세션 생성
+        else if (code) await supabase.auth.exchangeCodeForSession(code) // 구글·카카오 PKCE (검증자는 앱 웹뷰 저장소)
       } catch (e) {
         console.warn('[auth] 딥링크 처리 실패:', e)
       } finally {
@@ -53,8 +56,8 @@ export function AuthProvider({ children }) {
     if (!supabase) return
 
     if (provider === 'naver') {
-      // 네이버 커스텀 OAuth. (앱 딥링크 복귀는 서버 변경 필요 — 후속 작업)
-      if (isNative) { await Browser.open({ url: `${window.location.origin}/api/auth/naver/login` }); return }
+      // 네이버 커스텀 OAuth. 앱은 native=1 로 서버가 token_hash 딥링크로 복귀시킴
+      if (isNative) { await Browser.open({ url: `${window.location.origin}/api/auth/naver/login?native=1` }); return }
       window.location.href = '/api/auth/naver/login'
       return
     }
