@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">콕콕콕</string>
+    <string name="title_activity_main">콕콕콕</string>
+    <string name="package_name">com.kokkokkok.app</string>
+    <string name="custom_url_scheme">com.kokkokkok.app</string>
+</resources>

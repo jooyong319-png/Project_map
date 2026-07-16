@@ -1,8 +1,16 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from './supabase.js'
+import { Capacitor } from '@capacitor/core'
+import { App as CapApp } from '@capacitor/app'
+import { Browser } from '@capacitor/browser'
 
 // 로그인 상태 전역 관리 (Supabase Auth). 소셜 로그인은 signIn(provider) 로.
 const AuthCtx = createContext({ user: null, loading: true, signIn: () => {}, signOut: () => {} })
+
+// 네이티브(앱) 여부 — 앱이면 외부 브라우저 + 딥링크로 OAuth, 웹이면 기존 리다이렉트.
+// 옵션 B(웹뷰가 Vercel 사이트 로드)라도 Capacitor 브릿지가 주입돼 이 값이 참이 된다.
+const isNative = Capacitor.isNativePlatform()
+const APP_REDIRECT = 'kokkokkok://auth-callback' // AndroidManifest 의 스킴과 일치해야 함
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -20,12 +28,52 @@ export function AuthProvider({ children }) {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  // 구글·카카오는 Supabase 네이티브. 네이버는 별도(추후 /api/auth/naver).
+  // 앱 전용: OAuth 후 kokkokkok://auth-callback?code=... 로 복귀 → 세션 교환.
+  useEffect(() => {
+    if (!isNative || !supabase) return
+    const handle = CapApp.addListener('appUrlOpen', async ({ url }) => {
+      if (!url || !url.startsWith(APP_REDIRECT)) return
+      try {
+        const u = new URL(url)
+        const code = u.searchParams.get('code')
+        const errd = u.searchParams.get('error_description')
+        if (errd) console.warn('[auth] oauth 오류:', errd)
+        if (code) await supabase.auth.exchangeCodeForSession(code) // PKCE 검증자는 앱 웹뷰 저장소에 있음
+      } catch (e) {
+        console.warn('[auth] 딥링크 처리 실패:', e)
+      } finally {
+        try { await Browser.close() } catch {}
+      }
+    })
+    return () => { handle.then((h) => h.remove()) }
+  }, [])
+
+  // 구글·카카오는 Supabase 네이티브. 네이버는 커스텀 OAuth(/api/auth/naver).
   const signIn = async (provider) => {
     if (!supabase) return
-    if (provider === 'naver') { window.location.href = '/api/auth/naver/login'; return }
+
+    if (provider === 'naver') {
+      // 네이버 커스텀 OAuth. (앱 딥링크 복귀는 서버 변경 필요 — 후속 작업)
+      if (isNative) { await Browser.open({ url: `${window.location.origin}/api/auth/naver/login` }); return }
+      window.location.href = '/api/auth/naver/login'
+      return
+    }
+
+    if (isNative) {
+      // 앱: 외부 브라우저로 열고, 끝나면 딥링크로 복귀 → appUrlOpen 에서 세션 교환
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: APP_REDIRECT, skipBrowserRedirect: true },
+      })
+      if (error) { console.warn('[auth] signIn 실패:', error); return }
+      if (data?.url) await Browser.open({ url: data.url })
+      return
+    }
+
+    // 웹: 같은 탭 리다이렉트 (기존 동작)
     await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } })
   }
+
   const signOut = async () => { if (supabase) await supabase.auth.signOut() }
 
   return <AuthCtx.Provider value={{ user, loading, signIn, signOut }}>{children}</AuthCtx.Provider>

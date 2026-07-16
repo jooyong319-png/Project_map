@@ -7,7 +7,7 @@ const PROVIDERS = [
   { key: 'naver', label: '네이버로 시작하기', bg: '#03C75A', color: '#fff', icon: 'N' },
 ]
 
-export default function LoginModal({ onClose }) {
+export default function LoginModal({ onClose, reason }) {
   const { signIn } = useAuth()
   return (
     <>
@@ -16,7 +16,7 @@ export default function LoginModal({ onClose }) {
         <button className="login-close" onClick={onClose} aria-label="닫기">×</button>
         <div className="login-head">
           <div className="login-logo">📍 콕콕콕</div>
-          <div className="login-sub">로그인하고 AI 코스·즐겨찾기를 내 계정에</div>
+          <div className="login-sub">{reason || '로그인하고 AI 코스·즐겨찾기를 내 계정에'}</div>
         </div>
         <div className="login-btns">
           {PROVIDERS.map((p) => (

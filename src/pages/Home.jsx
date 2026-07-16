@@ -6,14 +6,18 @@ import GeoPanel from '../components/GeoPanel.jsx'
 import DetailModal from '../components/DetailModal.jsx'
 import CourseLauncher from '../components/CourseLauncher.jsx'
 import CoursePanel from '../components/CoursePanel.jsx'
+import LoginModal from '../components/LoginModal.jsx'
+import { useAuth } from '../lib/auth.jsx'
 import { getRestaurants, getCuration, getCourse } from '../lib/places.js'
-import { getBookmarks, toggleBookmark, getSavedItems } from '../lib/supabase.js'
+import { getBookmarks, toggleBookmark, getSavedItems, mergeLocalFavorites } from '../lib/supabase.js'
 import { COUNTRIES, PRICE_LABEL } from '../data/countries.js'
 import { kindOf } from '../data/kinds.js'
 
 const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
 
 export default function Home() {
+  const { user } = useAuth() // 로그인 유저 (AI 코스 게이팅용)
+  const [loginPrompt, setLoginPrompt] = useState(false) // 비로그인 시 AI 클릭 → 로그인 유도
   const [kind, setKind] = useState('food') // 검색 종류: food/travel/stay
   const [headerSlot, setHeaderSlot] = useState(null) // 헤더의 검색바 포털 위치
   useEffect(() => { setHeaderSlot(document.getElementById('header-search-slot')) }, [])
@@ -100,11 +104,16 @@ export default function Home() {
     if (hit) { setSelectedId(hit.id); setOpenItem(hit) }
   }, [items])
 
-  // 북마크/저장맛집 로드
+  // 북마크/저장맛집 로드 — 로그인 상태 바뀌면 다시 (로그인 시 게스트 즐겨찾기 계정으로 병합)
   useEffect(() => {
-    getBookmarks().then(setBookmarks)
-    getSavedItems().then(setSavedItems)
-  }, [])
+    let active = true
+    ;(async () => {
+      if (user) await mergeLocalFavorites()
+      const [bm, si] = await Promise.all([getBookmarks(), getSavedItems()])
+      if (active) { setBookmarks(bm); setSavedItems(si) }
+    })()
+    return () => { active = false }
+  }, [user])
 
   // 코스가 뜨면 모바일 바텀시트를 중간 크기로 (지도+코스 같이 보이게)
   useEffect(() => { if (course || courseLoading) setSheet('half') }, [course, courseLoading])
@@ -442,7 +451,7 @@ export default function Home() {
       <div className="hdr-ai-wrap">
         <button
           className={`hdr-ai ${courseLauncher ? 'on' : ''}`}
-          onClick={() => setCourseLauncher((o) => !o)}
+          onClick={() => { if (!user) { setLoginPrompt(true); return } setCourseLauncher((o) => !o) }}
           aria-expanded={courseLauncher}
           title="AI 코스 짜기"
         >
@@ -476,6 +485,12 @@ export default function Home() {
           favCount={savedItems.filter((d) => d.lat != null && d.lng != null).length}
           onClose={() => setCourseLauncher(false)}
         />
+      )}
+
+      {/* 비로그인 상태에서 AI 코스 클릭 → 로그인 유도 */}
+      {loginPrompt && createPortal(
+        <LoginModal reason="AI 코스는 로그인 후 이용할 수 있어요 🧭" onClose={() => setLoginPrompt(false)} />,
+        document.body,
       )}
 
       {filtersOpen && <div className="filter-backdrop" onClick={() => setFiltersOpen(false)} />}
