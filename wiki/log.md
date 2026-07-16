@@ -4,6 +4,7 @@
 
 ---
 
+`[2026-07] app:` **앱화 1단계** — Capacitor로 안드로이드 껍데기(앱ID `com.kokkokkok.app`). 웹뷰 소스=라이브 Vercel URL(옵션 B, `/api` 상대경로 재활용). 로그인 딥링크 전환: 앱=외부브라우저(`@capacitor/browser`)+`kokkokkok://auth-callback` 복귀→PKCE code교환, 웹=기존 리다이렉트. Supabase Redirect URLs에 딥링크 추가. **구글·카카오는 Supabase 콜백 그대로라 프로바이더 설정 변경 없음**(신규 안드로이드 클라/SHA-1 불필요). 네이버 앱로그인은 서버 딥링크복귀 필요→후속. 다음: JDK17+Android Studio로 폰 실기 테스트.
 `[2026-07] goal:` **다음 목표 = 앱화(출시).** 상세 [[다음-목표-앱화]]
 
 `[2026-07] auth:` 소셜 로그인 3종 완료 — 구글·카카오(Supabase 네이티브), 네이버(커스텀 OAuth `/api/auth/naver/[action]`). Supabase Auth 세션, `AuthProvider`/`LoginModal`/헤더 아바타. AI 코스는 로그인 게이팅.

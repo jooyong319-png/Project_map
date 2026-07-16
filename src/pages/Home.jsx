@@ -107,6 +107,7 @@ export default function Home() {
   // 북마크/저장맛집 로드 — 로그인 상태 바뀌면 다시 (로그인 시 게스트 즐겨찾기 계정으로 병합)
   useEffect(() => {
     let active = true
+    if (user) setLoginPrompt(false) // 앱(딥링크): 로그인되면 유도 모달 닫기
     ;(async () => {
       if (user) await mergeLocalFavorites()
       const [bm, si] = await Promise.all([getBookmarks(), getSavedItems()])

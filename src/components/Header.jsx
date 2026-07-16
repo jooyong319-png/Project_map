@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useAuth, userInfo } from '../lib/auth.jsx'
@@ -9,6 +9,9 @@ export default function Header() {
   const [loginOpen, setLoginOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const info = user ? userInfo(user) : null
+
+  // 앱(딥링크)에선 로그인해도 페이지 리로드가 없어 모달이 그대로 남는다 → 로그인되면 닫기
+  useEffect(() => { if (user) setLoginOpen(false) }, [user])
 
   return (
     <header>
