@@ -1,7 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { Geolocation } from '@capacitor/geolocation'
 import Globe from './Globe.jsx'
 import MapView from './MapView.jsx'
 import { DEFAULT_REGION } from '../data/countries.js'
+
+// 위치 획득 — 앱은 Capacitor 플러그인(런타임 권한 요청 포함), 웹은 navigator.geolocation
+function getPosition() {
+  const opts = { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+  if (Capacitor.isNativePlatform()) {
+    return (async () => {
+      const perm = await Geolocation.requestPermissions()
+      if (perm.location === 'denied' && perm.coarseLocation === 'denied') throw new Error('permission denied')
+      return Geolocation.getCurrentPosition(opts) // { coords:{latitude,longitude} }
+    })()
+  }
+  if (!navigator.geolocation) return Promise.reject(new Error('unsupported'))
+  return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, opts))
+}
 
 // 지구본에서 지역 핀을 클릭하거나 확대하면 그 지역 지도가 열리고(+ 맛집 검색),
 // 지도를 충분히 축소하면 다시 지구본으로 돌아온다.
@@ -41,9 +57,8 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
   const [myLoc, setMyLoc] = useState(null)
   const [locating, setLocating] = useState(false)
   const locateMe = () => {
-    if (!navigator.geolocation) { alert('이 브라우저는 위치 정보를 지원하지 않아요.'); return }
     setLocating(true)
-    navigator.geolocation.getCurrentPosition(
+    getPosition().then(
       (pos) => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
         setLocating(false)
@@ -55,7 +70,6 @@ export default function GeoPanel({ items, selected, onSelect, onAreaSearch, onRe
         }
       },
       () => { setLocating(false); alert('위치를 가져오지 못했어요. 권한을 허용했는지 확인해 주세요.') },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
     )
   }
 
