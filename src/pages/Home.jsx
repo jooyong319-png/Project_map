@@ -14,11 +14,14 @@ import { COUNTRIES, PRICE_LABEL } from '../data/countries.js'
 
 const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
 
-// AI 코스: 비로그인은 하루 1회 무료, 로그인은 무제한. 마지막 무료 사용 날짜를 localStorage에 기록.
-const AI_FREE_KEY = 'ai_free_date'
-const aiToday = () => new Date().toISOString().slice(0, 10) // YYYY-MM-DD (로컬 기준 날짜면 충분)
-function guestAiUsedToday() { try { return localStorage.getItem(AI_FREE_KEY) === aiToday() } catch { return false } }
-function markGuestAiUsed() { try { localStorage.setItem(AI_FREE_KEY, aiToday()) } catch {} }
+// AI 코스: 비로그인은 하루 GUEST_AI_PER_DAY 회, 로그인은 무제한. 오늘 날짜+횟수를 localStorage에 기록.
+//  (로그인이 DB 꺼짐으로 막혀 있는 동안 검증 실험을 위해 5회. 서버 쪽 제한은 2단계에서)
+const GUEST_AI_PER_DAY = 5
+const AI_FREE_KEY = 'ai_free_v2'
+const aiToday = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` } // 기기 로컬 날짜(KST 자정 초기화)
+function guestAiCount() { try { const v = JSON.parse(localStorage.getItem(AI_FREE_KEY) || '{}'); return v.d === aiToday() ? v.n || 0 : 0 } catch { return 0 } }
+function guestAiUsedToday() { return guestAiCount() >= GUEST_AI_PER_DAY }
+function markGuestAiUsed() { try { localStorage.setItem(AI_FREE_KEY, JSON.stringify({ d: aiToday(), n: guestAiCount() + 1 })) } catch {} }
 
 export default function Home() {
   const { user } = useAuth() // 로그인 유저 (AI 코스 게이팅용)
