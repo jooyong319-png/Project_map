@@ -47,8 +47,6 @@ const TAG_DESC = {
   휴양지: '쉬기 좋은', 가성비: '가성비', 애견동반: '반려견 OK', 호캉스: '호캉스', 럭셔리: '고급',
 }
 
-// 블로그 많은순 = 네이버 블로그 언급 수(분석된 곳 우선), 카카오 기본순 = 카카오 검색 순서 그대로
-const SORTS = [['blog', '블로그 많은순'], ['kakao', '카카오 기본순']]
 const LIMITS = [50, 100, 200]
 
 export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, onLimit, country, onCountry, city, onCity, area, onArea, keyword, onKeyword, tags = [], onToggleTag, tagOptions = [], onRegionPick, pickedLabel }) {
@@ -88,13 +86,6 @@ export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, 
           <button key={k.key} className={`cat-btn ${kind === k.key ? 'on' : ''}`} onClick={() => onKind && onKind(k.key)}>
             <span className="kind-ic">{k.icon}</span>{k.label}
           </button>
-        ))}
-      </div>
-
-      <div className="filter-sec-label">정렬</div>
-      <div className="chips chips-wrap">
-        {SORTS.map(([v, label]) => (
-          <button key={v} className={`chip ${sort === v ? 'active' : ''}`} onClick={() => onSort && onSort(v)}>{label}</button>
         ))}
       </div>
 

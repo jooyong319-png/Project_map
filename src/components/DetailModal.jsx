@@ -42,6 +42,19 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
     return () => { active = false }
   }, [data?.id, data?.source, data?.gid])
 
+  // 네이버 블로그 후기 수 — 상세를 열 때마다 실시간 조회(저장 안 함). 이 화면엔 광고를 붙이지 않는다(네이버 검색 API 특약).
+  const [blog, setBlog] = useState(null) // { total, url }
+  useEffect(() => {
+    setBlog(null)
+    if (!data?.name) return
+    let active = true
+    fetch(`/api/place?blog=1&name=${encodeURIComponent(data.name)}&addr=${encodeURIComponent(data.region || '')}`)
+      .then((r) => r.json())
+      .then((d) => { if (active && d?.url) setBlog(d) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [data?.id, data?.name, data?.region])
+
   if (!data) return null
 
   const isKakao = data.source === 'kakao'
@@ -96,7 +109,6 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
             <> · <span className="detail-star">★ {Number(data.rating).toFixed(1)}</span>
             <span className="detail-rev"> ({Number(data.reviews).toLocaleString()})</span></>
           ) : isKakao ? <span className="detail-rev"> · 카카오맵</span> : null}
-          {data.blog > 0 && <span className="detail-rev"> · 📝 블로그 {fmtBlog(data.blog)}</span>}
         </div>
         {data.tags?.length > 0 && (
           <div className="detail-tags">
@@ -165,6 +177,11 @@ export default function DetailModal({ data, onClose, onBookmark, bookmarked, she
         {isKakao && (
           <a className="kakao-link" href={mapsUrl} target="_blank" rel="noreferrer">
             카카오맵에서 사진·리뷰 보기 →
+          </a>
+        )}
+        {blog && (
+          <a className="kakao-link" href={blog.url} target="_blank" rel="noreferrer">
+            📝 네이버 블로그 후기{blog.total > 0 ? ` ${fmtBlog(blog.total)}건` : ''} 보기 →
           </a>
         )}
       </div>

@@ -11,7 +11,6 @@ import { useAuth } from '../lib/auth.jsx'
 import { getRestaurants, getCuration, getCourse } from '../lib/places.js'
 import { getBookmarks, toggleBookmark, getSavedItems, mergeLocalFavorites } from '../lib/supabase.js'
 import { COUNTRIES, PRICE_LABEL } from '../data/countries.js'
-import { kindOf } from '../data/kinds.js'
 
 const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
 
@@ -138,13 +137,6 @@ export default function Home() {
     let r = showingSaved ? savedItems : items
     // '전체'는 음식·여행지·숙소 인터리브 순서 유지(정렬하면 한 종류로 쏠림)
     if (search.kind !== 'all') {
-      // 기본: 블로그 많은순 — 맛집 태그 > 블로그 언급 보유 > 그 외 순, 같은 단계는 블로그 수.
-      //  블로그 정보가 없는 곳(분석 전 지역)은 카카오가 준 순서(정확도/거리) 그대로 유지(stable sort).
-      //  'kakao' = 카카오 기본순(정렬 안 함).
-      if (search.sort !== 'kakao') {
-        const tier = (x) => (x.tags?.includes('맛집') ? 2 : (x.blog > 0 ? 1 : 0))
-        r = [...r].sort((a, b) => tier(b) - tier(a) || (b.blog || 0) - (a.blog || 0))
-      }
     }
     if (search.price) r = r.filter((d) => d.priceLevel === search.price) // 가격대 필터(가격 미상은 제외)
     return r.slice(0, search.lim)
@@ -168,7 +160,6 @@ export default function Home() {
     if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' } // 키워드 검색
     // 기본(지역 검색): 종류 N곳 + 무슨 필터가 적용됐는지
     const f = []
-    if (search.kind !== 'all') f.push(search.sort === 'kakao' ? '카카오 기본순' : '블로그 많은순') // 전체는 정렬 안 함
     if (search.tags?.length) f.push(search.tags.join('·'))
     if (search.price) f.push(PRICE_LABEL[search.price])
     return { prefix: noun[search.kind] || '장소', suffix: `${search.lim}곳`, meta: f.join(' · ') }
@@ -257,7 +248,7 @@ export default function Home() {
   // 즐겨찾기를 코스 후보 형태로 정규화 (좌표 있는 것만)
   const favCandidates = () => savedItems
     .filter((d) => d.lat != null && d.lng != null)
-    .map((d) => ({ id: d.id, name: d.name, kind: d.kind || 'food', region: d.region || '', tags: d.tags || [], blog: d.blog || 0, lat: d.lat, lng: d.lng }))
+    .map((d) => ({ id: d.id, name: d.name, kind: d.kind || 'food', region: d.region || '', tags: d.tags || [], licensed: d.licensed || '', lat: d.lat, lng: d.lng }))
 
   // 🧭 AI 코스 짜기 — 지역 + 테마(선택) + 즐겨찾기 참고(선택)
   const onCourse = async (bbox, theme = '', candidates = null) => {
@@ -516,7 +507,7 @@ export default function Home() {
           city={city} onCity={onCity}
           area={area} onArea={onArea}
           keyword={keyword} onKeyword={setKeyword}
-          tags={tags} onToggleTag={toggleTag} tagOptions={kindOf(kind).tags}
+          tags={tags} onToggleTag={toggleTag} tagOptions={[] /* 공공데이터 태그(노포 등) 준비 전까지 숨김 — 기존 태그는 네이버 기반이라 폐기 */}
           onRegionPick={onRegionPick} pickedLabel={pickedLabel}
         />
         </div>
@@ -590,7 +581,7 @@ export default function Home() {
                     : `이 지역에 표시할 ${({ all: '장소', food: '맛집', travel: '여행지', stay: '숙소' })[kind] || '장소'}이 없어요 🥲`
                 }
               />
-              <div className="results-foot">장소 정보는 카카오, 블로그 수는 네이버 블로그 검색 기준입니다.</div>
+              <div className="results-foot">장소 정보 © 카카오</div>
             </>
           )}
         </div>

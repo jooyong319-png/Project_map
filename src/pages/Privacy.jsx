@@ -31,7 +31,7 @@ export default function Privacy() {
       <ul>
         <li><b>Supabase</b> — 로그인 인증 및 즐겨찾기 데이터 저장</li>
         <li><b>카카오</b> — 로그인, 지도·장소 검색</li>
-        <li><b>네이버</b> — 로그인, 블로그 기반 장소 정보</li>
+        <li><b>네이버</b> — 로그인, 장소별 블로그 후기 수 표시(실시간 조회, 저장하지 않음)</li>
         <li><b>Google Gemini</b> — AI 코스 추천 생성(검색된 장소 목록만 전달)</li>
         <li><b>Vercel</b> — 서비스 호스팅</li>
       </ul>

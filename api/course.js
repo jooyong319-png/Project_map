@@ -1,7 +1,7 @@
 // AI 코스 짜기 — 현재 지도 영역의 '저장된 곳'(숙소·맛집·관광지)에서 하루 동선을 만든다.
 //  · 핵심: AI 가 좌표를 지어내지 않게, 우리 seed DB 에 실재하는 곳만 후보로 주고
 //    Gemini 는 그중에서 '고르고 · 순서 잡고 · 이유 쓰기'만 한다(환각 방지).
-//  · GEMINI_API_KEY 가 없으면 휴리스틱(블로그수 + 최근접 순서)으로 폴백 — 키 없이도 동작.
+//  · GEMINI_API_KEY 가 없으면 휴리스틱(영업 연수·태그 + 최근접 순서)으로 폴백 — 키 없이도 동작.
 // 호출:  GET /api/course?bbox=서,남,동,북
 // 환경변수: GEMINI_API_KEY (없으면 폴백), GEMINI_MODEL(선택, 기본 gemini-2.5-flash)
 
@@ -13,7 +13,11 @@ const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
 const inBox = (p, w, s, e, n) => p.lng >= w && p.lng <= e && p.lat >= s && p.lat <= n
 const d2 = (a, b) => { const dx = a.lng - b.lng, dy = a.lat - b.lat; return dx * dx + dy * dy }
-const topBy = (list, n) => [...list].sort((a, b) => (b.blog || 0) - (a.blog || 0)).slice(0, n)
+// 인기 신호 = 공공데이터만 (네이버 블로그 수는 약관상 코스 후보·AI 입력에 못 씀)
+//  · 영업 연수(인허가일 기준, 오래될수록 검증된 곳) + 지정·특징 태그 수
+const sinceYear = (p) => (p.licensed ? parseInt(String(p.licensed).slice(0, 4), 10) || 0 : 0)
+const score = (p) => (sinceYear(p) ? Math.min(new Date().getFullYear() - sinceYear(p), 50) : 0) + (p.tags?.length || 0) * 10
+const topBy = (list, n) => [...list].sort((a, b) => score(b) - score(a)).slice(0, n)
 
 // 시작점에서 가까운 순으로 순서 잡기(최근접 이웃) — 동선이 안 꼬이게
 function nearestRoute(start, places) {
@@ -51,7 +55,7 @@ async function readBody(req) {
   })
 }
 
-// 키 없을 때 폴백: 블로그수 상위로 뽑고 최근접 순서로 묶는다
+// 키 없을 때 폴백: 공공데이터 점수(영업 연수·태그) 상위로 뽑고 최근접 순서로 묶는다
 function heuristicCourse(cand) {
   const stay = cand.stay[0]
   const picked = [...topBy(cand.food, 3), ...topBy(cand.travel, 2)]
@@ -63,7 +67,7 @@ function heuristicCourse(cand) {
     ...p, order: i + 1,
     reason: p.kind === 'stay' ? '오늘의 베이스캠프 — 짐 풀고 출발하기 좋아요'
       : p.kind === 'travel' ? '근처에서 둘러보기 좋은 명소'
-      : '블로그에서 자주 언급되는 인기 맛집',
+      : '이 동네에서 오래 자리를 지킨 곳',
   }))
   return { title: '하루 추천 코스', summary: `이 지역 인기 ${stops.length}곳을 가까운 순서로 묶었어요.`, stops, by: 'auto' }
 }
@@ -75,7 +79,7 @@ async function geminiCourse(cand, key, theme, cluster = false) {
   for (const k of ['stay', 'food', 'travel']) {
     for (const p of cand[k]) {
       byId.set(p.id, p)
-      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', tags: p.tags || [], blog: p.blog || 0, fav: !!p.fav })
+      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, fav: !!p.fav })
     }
   }
   const hasFav = flat.some((f) => f.fav)
@@ -88,7 +92,7 @@ async function geminiCourse(cand, key, theme, cluster = false) {
     hasFav ? '- fav:true 는 사용자가 즐겨찾기한 곳이야. 동선에 맞으면 적극적으로 우선 포함해줘.' : '',
     '- 숙소(kind=stay)가 있으면 1곳을 베이스캠프로 맨 처음에 넣어. 없으면 생략.',
     '- 맛집(kind=food) 2~3곳, 관광지(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→저녁 느낌).',
-    '- blog(블로그 언급수)와 tags 를 인기/특징 근거로 참고해.',
+    '- since(영업 시작 연도, 오래될수록 검증된 곳)와 cat·tags 를 특징 근거로 참고해. 없는 정보(평점·후기 수 등)를 지어내지 마.',
     '- 각 stop 의 reason 은 한국어 한 문장, 친근하고 구체적으로.',
     '- title 은 이 동선을 한 줄로 표현(예: "성수 감성 한 바퀴"), summary 는 한 문장 소개.',
     th ? `- 사용자가 원하는 테마: "${th}". 이 테마 분위기에 맞게 장소를 고르고, 순서·이유·제목에도 테마를 자연스럽게 반영해.` : '',
