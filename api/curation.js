@@ -4,6 +4,7 @@
 // ⚠️ 시드 목록은 출발점입니다 — 폐업/이전이 있을 수 있어 검증·확장하며 쓰세요.
 
 import { enrichWithGoogle, catFromKakao, ICON_BY_CAT, PALETTE } from './kakao.js'
+import { googleKey } from '../lib/gcache.js'
 
 // tags: 노포 / 미쉐린 / 평냉(평양냉면) / 흑백요리사 등
 const CURATION = [
@@ -64,7 +65,7 @@ async function resolveKakao(item, kkey) {
 
 export default async function handler(req, res) {
   const kkey = process.env.KAKAO_REST_KEY
-  const gkey = process.env.GOOGLE_PLACES_API_KEY
+  const gkey = googleKey()
   if (!kkey) { res.status(200).json({ places: [], fallback: true }); return }
 
   const tag = (req.query?.tag || '').toString()

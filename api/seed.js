@@ -8,7 +8,7 @@
 
 import { enrichWithGoogle, catFromKakao, ICON_BY_CAT, KIND_ICON, catCodeOf } from './kakao.js'
 import { naverTags, matjipCutoff, isMatjip, dongOf, topTagOf } from '../lib/naver.js'
-import { cachedEnrich } from '../lib/gcache.js'
+import { cachedEnrich, googleKey } from '../lib/gcache.js'
 import { seedAll, seedUpsert, scannedAll, scannedAdd } from '../lib/store.js'
 
 const LIVE_MAX = 36 // 라이브 스캔 때 태깅할 최대 가게 수(비용 상한)
@@ -57,7 +57,7 @@ async function liveScan(box, kkey, nid, nsec, kind) {
 
 export default async function handler(req, res) {
   const kkey = process.env.KAKAO_REST_KEY
-  const gkey = process.env.GOOGLE_PLACES_API_KEY
+  const gkey = googleKey()
   const nid = process.env.NAVER_CLIENT_ID
   const nsec = process.env.NAVER_CLIENT_SECRET
   const kind = (req.query?.kind || 'food').toString()

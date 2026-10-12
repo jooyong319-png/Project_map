@@ -1,11 +1,11 @@
 import { MOCK } from '../data/mockRestaurants'
 
-// 한국 영역인지(대략) — 한국은 카카오, 그 외는 구글을 쓴다(구글은 한국 맛집 데이터가 약함).
-function isKorea(lat, lng) {
+// 한국 영역인지(대략) — 장소 데이터는 카카오(국내 전용)만 쓴다. 해외는 '준비 중'.
+export function isKorea(lat, lng) {
   return lng >= 124.5 && lng <= 131.5 && lat >= 33 && lat <= 39
 }
 
-// 큐레이션(화제의 맛집) — 시드 목록을 카카오로 좌표 찾고 구글로 평점·사진 보강해 반환
+// 큐레이션(화제의 맛집) — 시드 목록을 카카오로 좌표 찾아 반환
 export async function getCuration(tag = '') {
   try {
     const params = new URLSearchParams()
@@ -39,8 +39,8 @@ export async function getCourse(bbox, theme = '', candidates = null) {
 }
 
 // 맛집 데이터를 가져온다.
-// 1) 한국 영역(bbox) → /api/kakao (카카오 로컬), 그 외 → /api/places (구글)
-// 2) 카카오 키가 없으면(fallback) 구글로, 구글도 없으면 목 데이터로 폴백
+// 1) 한국 영역(또는 영역 없는 전국 검색) → /api/kakao (카카오 로컬). 해외 영역 → 빈 결과 + source:'overseas'
+// 2) 카카오 키가 없으면(fallback, 로컬 개발) 목 데이터로 데모. 그 외 실패는 빈 결과(source:'error')
 export async function getRestaurants(query = '', opts = {}) {
   const base = query.trim()
   const cat = opts.category && opts.category !== '전체' ? opts.category : ''
@@ -55,7 +55,6 @@ export async function getRestaurants(query = '', opts = {}) {
       p.set('tags', tags.join(','))
       p.set('kind', kind)
       if (bbox) p.set('bbox', bbox.join(','))
-      if (opts.limit) p.set('enrich', String(opts.limit))
       const res = await fetch(`/api/seed?${p.toString()}`)
       if (res.ok) {
         const data = await res.json()
@@ -65,40 +64,34 @@ export async function getRestaurants(query = '', opts = {}) {
     return { items: [], source: 'seed' }
   }
 
-  // forceGoogle: 한국이라도 구글 텍스트검색 사용(장르/의미 검색 정확도↑ — 엔터 검색의 지역+키워드에 쓰임)
-  const useKakao = !opts.forceGoogle && Array.isArray(bbox) && isKorea((bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2)
-  const endpoints = useKakao ? ['/api/kakao', '/api/places'] : ['/api/places']
-  // 키워드/카테고리를 따로 보내고, 실제 검색어 변환은 서버에서(전 세계 통하게)
+  // 해외 영역은 카카오에 데이터가 없다(국내 전용) → 구글 대신 '준비 중'으로 둔다(비용).
+  if (Array.isArray(bbox) && !isKorea((bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2)) {
+    return { items: [], source: 'overseas' }
+  }
   try {
     const params = new URLSearchParams()
     if (base) params.set('q', base)
     if (cat) params.set('cat', cat)
     if (kind && kind !== 'food') params.set('kind', kind)
     if (bbox) params.set('bbox', bbox.join(','))
-    if (opts.global) params.set('global', '1') // 전세계 검색(지역 제한 없음)
-    if (opts.openNow) params.set('open', '1') // 영업 중만 (구글 API openNow)
-    if (opts.oldschool) params.set('oldschool', '1') // 노포(오래된 가게)만 — 카카오 한정
-    if (useKakao && opts.limit) {
-      params.set('lim', String(opts.limit)) // 격자로 모을 목표 개수(50/100/200)
-      params.set('enrich', String(Math.min(opts.limit, 60))) // 구글 보강은 비용상 상위 60개로 제한
-    }
-    for (const ep of endpoints) {
-      const res = await fetch(`${ep}?${params.toString()}`)
-      if (!res.ok) continue
-      const data = await res.json()
-      if (data.fallback) continue // 키 없음 → 다음 소스로
+    if (opts.limit) params.set('lim', String(opts.limit)) // 격자로 모을 목표 개수(50/100/200)
+    const res = await fetch(`/api/kakao?${params.toString()}`)
+    if (!res.ok) return { items: [], source: 'error' }
+    const data = await res.json()
+    if (!data.fallback) {
+      if (data.error) return { items: [], source: 'error' }
       let items = Array.isArray(data.places) ? data.places : []
       // 지역 한정: 주소에 그 지역명(예 "개봉")이 든 곳만 (개봉동만 보고 싶을 때). 비면 원래대로.
       if (opts.regionTerm) {
         const f = items.filter((i) => (i.region || '').includes(opts.regionTerm))
         if (f.length) items = f
       }
-      return { items, source: items[0]?.source || 'google', center: data.center || null } // center: 지역검색 시 지도 이동용
+      return { items, source: 'kakao', center: data.center || null } // center: 지역검색 시 지도 이동용
     }
   } catch (_) {
-    // 네트워크 오류 → 폴백
+    return { items: [], source: 'error' } // 네트워크 오류
   }
-  // 여기 도달 = 키 없음(fallback) 또는 네트워크 오류 → 목 데이터로 데모
+  // 여기 도달 = 카카오 키 없음(로컬 개발) → 목 데이터로 데모
   let items = MOCK
   if (cat) items = items.filter((d) => d.cat === cat)
   if (base) items = items.filter((d) => (d.name + d.region + d.cat).toLowerCase().includes(base.toLowerCase()))

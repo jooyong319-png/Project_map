@@ -1,12 +1,13 @@
 // Vercel 서버리스 함수 - Google Place Photos 프록시
 // 브라우저에서 GET /api/photo?ref=<photoName>&w=200 로 호출.
 // 키를 서버에서만 사용해 노출을 막고, 받은 이미지를 그대로 전달한다.
+import { googleKey } from '../lib/gcache.js'
 
 export default async function handler(req, res) {
   let ref = (req.query?.ref || '').toString()
   const place = (req.query?.place || '').toString()
   const w = Math.min(Math.max(parseInt(req.query?.w, 10) || 200, 40), 1600)
-  const key = process.env.GOOGLE_PLACES_API_KEY
+  const key = googleKey()
   if (!key) {
     res.status(404).end()
     return

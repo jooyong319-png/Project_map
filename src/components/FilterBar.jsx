@@ -38,9 +38,6 @@ function ChipRow({ children }) {
   )
 }
 
-// 구글 priceLevel(1~4) → 1인 기준 대략 금액대 라벨(근사치)
-const PRICES = [[1, '~1만원'], [2, '1~3만원'], [3, '3~5만원'], [4, '5만원+']]
-
 // 태그 설명(블로그 분석 기반). 종류별 태그는 kinds.js 에서 옴.
 const TAG_DESC = {
   맛집: '블로그에서 인기', 인기: '블로그에서 인기', 노포: '오래된 가게', 혼밥: '혼밥 친화', 핫플: 'SNS에서 핫한',
@@ -50,11 +47,11 @@ const TAG_DESC = {
   휴양지: '쉬기 좋은', 가성비: '가성비', 애견동반: '반려견 OK', 호캉스: '호캉스', 럭셔리: '고급',
 }
 
-// 전국 라이브(카카오)에서 항상 작동하는 구글 신호 기준만 노출. (인기/노포는 베이스 깐 지역만 데이터가 있어 제외)
-const SORTS = [['reviews', '리뷰 많은순'], ['rating', '평점 높은순']]
+// 블로그 많은순 = 네이버 블로그 언급 수(분석된 곳 우선), 카카오 기본순 = 카카오 검색 순서 그대로
+const SORTS = [['blog', '블로그 많은순'], ['kakao', '카카오 기본순']]
 const LIMITS = [50, 100, 200]
 
-export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, onLimit, country, onCountry, city, onCity, area, onArea, keyword, onKeyword, price, onPrice, tags = [], onToggleTag, tagOptions = [], onRegionPick, pickedLabel }) {
+export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, onLimit, country, onCountry, city, onCity, area, onArea, keyword, onKeyword, tags = [], onToggleTag, tagOptions = [], onRegionPick, pickedLabel }) {
   const [regionModal, setRegionModal] = useState(false)
   const isKorea = !country || country === '대한민국' // 태그 필터는 카카오(한국) 한정
   // 키워드: 한국이면 카테고리별(음식종류/궁궐·박물관/호텔·펜션…), 해외면 그 나라 키워드
@@ -178,16 +175,6 @@ export default function FilterBar({ kind = 'food', onKind, sort, onSort, limit, 
               <span className="kw-main">{k}</span>
               {KW_DESC[k] && <span className="kw-sub">{KW_DESC[k]}</span>}
             </button>
-          ))}
-        </div>
-      </>}
-
-      {kind === 'food' && <>
-        <div className="filter-sec-label">가격 <span>1인 기준</span></div>
-        <div className="chips chips-wrap">
-          <button className={`chip ${!price ? 'active' : ''}`} onClick={() => onPrice(0)}>가격 전체</button>
-          {PRICES.map(([lv, label]) => (
-            <button key={lv} className={`chip ${price === lv ? 'active' : ''}`} onClick={() => onPrice(price === lv ? 0 : lv)}>{label}</button>
           ))}
         </div>
       </>}

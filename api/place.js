@@ -1,10 +1,11 @@
 // Vercel 서버리스 함수 - Google Place Details 프록시
 // 상세 패널 열 때 GET /api/place?id=<placeId> 로 호출.
 // 전화·홈페이지·지도링크·사진여러장·영업시간 등 풍부한 정보를 한국어로 반환.
+import { googleKey } from '../lib/gcache.js'
 
 export default async function handler(req, res) {
   const id = (req.query?.id || '').toString()
-  const key = process.env.GOOGLE_PLACES_API_KEY
+  const key = googleKey()
   if (!id || !key) {
     res.status(200).json({ error: 'no id/key' })
     return

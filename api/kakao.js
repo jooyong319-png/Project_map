@@ -25,7 +25,7 @@ export function catFromKakao(name = '') {
   return '기타'
 }
 
-import { cachedEnrich } from '../lib/gcache.js'
+import { cachedEnrich, googleKey } from '../lib/gcache.js'
 import { seedByIds } from '../lib/store.js'
 
 // 카카오 가게를 구글에 이름+좌표로 매칭해 평점·사진을 가져온다 (표시용).
@@ -233,7 +233,7 @@ export default async function handler(req, res) {
     } catch (_) {}
 
     // 구글 보강: 보여줄 상위 N개에 평점·리뷰·사진 채우기 (캐시 우선, 14일 지난 것만 재호출)
-    const gkey = process.env.GOOGLE_PLACES_API_KEY
+    const gkey = googleKey()
     const enrichN = Math.min(Math.max(parseInt(req.query?.enrich, 10) || 0, 0), 60)
     if (gkey && enrichN > 0) places = await cachedEnrich(places, enrichN, (it) => enrichWithGoogle(it, gkey))
 

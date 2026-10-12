@@ -1,6 +1,7 @@
 // Vercel 서버리스 함수 - Google Places API (New) Text Search 프록시
 // 브라우저에서 GET /api/places?q=검색어 로 호출.
-// GOOGLE_PLACES_API_KEY 가 없으면 fallback:true 를 반환해 프런트엔드가 목 데이터를 쓰게 합니다.
+// 구글 스위치(GOOGLE_ENABLED=1 + 키)가 꺼져 있으면 fallback:true 를 반환합니다. (현재 프런트는 해외를 '준비 중'으로 두고 호출 안 함)
+import { googleKey } from '../lib/gcache.js'
 
 const CAT_BY_TYPE = {
   korean_restaurant: '한식', barbecue_restaurant: '고기', seafood_restaurant: '횟집',
@@ -32,7 +33,7 @@ const PALETTE = ['#f3a86b', '#9bcf8a', '#7cb6e8', '#e98f8f', '#c9a3e0', '#e0a35c
 const PRICE = { PRICE_LEVEL_INEXPENSIVE: '₩', PRICE_LEVEL_MODERATE: '₩₩', PRICE_LEVEL_EXPENSIVE: '₩₩₩', PRICE_LEVEL_VERY_EXPENSIVE: '₩₩₩₩' }
 
 export default async function handler(req, res) {
-  const key = process.env.GOOGLE_PLACES_API_KEY
+  const key = googleKey()
   if (!key) {
     res.status(200).json({ places: [], fallback: true })
     return

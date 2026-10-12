@@ -6,7 +6,7 @@
 // 환경변수: GEMINI_API_KEY (없으면 폴백), GEMINI_MODEL(선택, 기본 gemini-2.5-flash)
 
 import { seedAll } from '../lib/store.js'
-import { cachedEnrich } from '../lib/gcache.js'
+import { cachedEnrich, googleKey } from '../lib/gcache.js'
 import { enrichWithGoogle } from './kakao.js'
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
@@ -262,7 +262,7 @@ export default async function handler(req, res) {
     // 코스 항목에 구글 평점·사진 보강(캐시 우선, 14일 지난 것만 재호출) + 상세연결용 source/gid
     if (course.stops?.length) {
       course.stops = course.stops.map((s) => ({ source: 'kakao', ...s }))
-      const gkey = process.env.GOOGLE_PLACES_API_KEY
+      const gkey = googleKey()
       if (gkey) course.stops = await cachedEnrich(course.stops, course.stops.length, (it) => enrichWithGoogle(it, gkey))
     }
     // 구간별 이동시간(차/대중교통/도보)

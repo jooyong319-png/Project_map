@@ -7,7 +7,7 @@ export default function App() {
       <Header />
       <Outlet />
       <footer className="footnote">
-        평점·리뷰 수는 Google Places API 기준입니다. 키 미설정 시 데모용 샘플 데이터가 표시됩니다.
+        장소 정보 © 카카오 · 블로그 수 © 네이버
       </footer>
     </>
   )

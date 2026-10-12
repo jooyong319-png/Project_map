@@ -1,6 +1,6 @@
 // 개인정보처리방침 — Play 스토어/앱 필수. 독립 페이지(/privacy).
 export default function Privacy() {
-  const updated = '2026-07-16'
+  const updated = '2026-10-13'
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '28px 20px 80px', lineHeight: 1.7, color: '#222', fontSize: 15 }}>
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>개인정보처리방침</h1>
@@ -32,7 +32,6 @@ export default function Privacy() {
         <li><b>Supabase</b> — 로그인 인증 및 즐겨찾기 데이터 저장</li>
         <li><b>카카오</b> — 로그인, 지도·장소 검색</li>
         <li><b>네이버</b> — 로그인, 블로그 기반 장소 정보</li>
-        <li><b>Google</b> — 장소 별점·사진 등 정보(Google Places)</li>
         <li><b>Google Gemini</b> — AI 코스 추천 생성(검색된 장소 목록만 전달)</li>
         <li><b>Vercel</b> — 서비스 호스팅</li>
       </ul>

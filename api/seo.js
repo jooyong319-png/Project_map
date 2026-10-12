@@ -10,9 +10,11 @@ const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 // ── 장소 1곳 ──
 async function getPlace(id) {
   if (!SB_URL || !SB_KEY || !id) return null
-  const r = await fetch(`${SB_URL}/rest/v1/seed?id=eq.${encodeURIComponent(id)}&select=*&limit=1`, { headers: sbHeaders })
-  if (!r.ok) return null
-  return (await r.json())[0] || null
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/seed?id=eq.${encodeURIComponent(id)}&select=*&limit=1`, { headers: sbHeaders })
+    if (!r.ok) return null
+    return (await r.json())[0] || null
+  } catch (_) { return null } // DB 연결 실패 → 404 페이지로
 }
 
 function placeHtml(p, site, id) {
@@ -64,8 +66,8 @@ async function sitemapXml(site) {
   const ids = []
   if (SB_URL && SB_KEY) {
     for (let off = 0; off < 60000; off += 1000) {
-      const r = await fetch(`${SB_URL}/rest/v1/seed?select=id&licensed=not.is.null&limit=1000&offset=${off}`, { headers: sbHeaders })
-      if (!r.ok) break
+      const r = await fetch(`${SB_URL}/rest/v1/seed?select=id&licensed=not.is.null&limit=1000&offset=${off}`, { headers: sbHeaders }).catch(() => null)
+      if (!r?.ok) break // DB 연결 실패 → 지금까지 모은 것만(빈 sitemap)
       const rows = await r.json()
       for (const x of rows) ids.push(x.id)
       if (rows.length < 1000) break
