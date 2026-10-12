@@ -4,6 +4,12 @@ import { Fragment } from 'react'
 const KIND_LABEL = { food: '맛집', travel: '관광지', stay: '숙소' }
 const KIND_COLOR = { food: '#f0792e', travel: '#2ea36b', stay: '#7c5cff' }
 
+// 관광공사 이용시간 원문("[평일] / - 11:00~20:30 / - 준비시간 …")을 한 줄로 줄인다
+function shortHours(s = '') {
+  const t = s.replace(/\s*\/\s*/g, ' ').replace(/(^|\s)-\s+/g, '$1').replace(/※.*$/, '').replace(/\s+/g, ' ').trim()
+  return t.length > 48 ? t.slice(0, 47) + '…' : t
+}
+
 // 분 → "1시간 5분" / "30분"
 function fmtMin(m) {
   if (!m || m < 1) return ''
@@ -63,6 +69,11 @@ export default function CoursePanel({ course, loading, selected, onSelectStop, o
                       {s.rating > 0 && <span className="course-rate">★ {Number(s.rating).toFixed(1)}</span>}
                     </span>
                     <span className="course-meta">{s.reason}</span>
+                    {(s.hours?.use || s.hours?.rest) && (
+                      <span className="course-meta course-hours">
+                        🕒 {shortHours(s.hours.use) || '시간 정보 없음'}{s.hours.rest ? ` · 휴무 ${shortHours(s.hours.rest)}` : ''}
+                      </span>
+                    )}
                   </span>
                   {s.photo && <img className="course-thumb" src={s.photo} alt="" loading="lazy" />}
                 </button>

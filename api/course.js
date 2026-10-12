@@ -6,6 +6,7 @@
 // 환경변수: GEMINI_API_KEY (없으면 폴백), GEMINI_MODEL(선택, 기본 gemini-2.5-flash)
 
 import { seedAll } from '../lib/store.js'
+import { placesIn } from '../lib/areas.js'
 import { cachedEnrich, googleKey } from '../lib/gcache.js'
 import { enrichWithGoogle } from './kakao.js'
 
@@ -33,8 +34,31 @@ function nearestRoute(start, places) {
   return route
 }
 
-// 영역 안 + 종류별 인기 상위 후보를 모은다
+// 같은 우선순위 안에서는 섞는다 → '다시 짜기'마다 다른 코스
+const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]] } return r }
+// 우선순위(tier) 높은 것부터, tier 안에서는 무작위로 n개
+const pick = (list, tier, n) => {
+  const groups = new Map()
+  for (const p of list) { const t = tier(p); if (t < 0) continue; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(p) }
+  return [...groups.keys()].sort((a, b) => b - a).flatMap((t) => shuffle(groups.get(t))).slice(0, n)
+}
+const curated = (p) => p.tags?.includes('관광공사 소개') // 관광공사가 소개한 곳 = 이용시간·쉬는 날 정보가 있다
+// 식사: 관광공사 소개 > 노포·백년가게 > 그 외(후보에서 제외)
+const mealTier = (p) => (curated(p) ? 2 : (p.tags?.includes('백년가게') || p.tags?.includes('노포')) ? 1 : -1)
+const cafeTier = (p) => (curated(p) ? 1 : 0)
+const sightTier = (p) => (p.cat === '쇼핑' ? 0 : 1) // 관광지·문화시설 > 쇼핑(플래그십·편집숍)
+
+// 영역 안 후보를 모은다 — 정적 동네 데이터(공공데이터) 우선, 준비 안 된 동네는 DB(seed) 폴백
 async function gatherCandidates(bbox) {
+  const local = placesIn(bbox).map((p) => ({ ...p, region: p.region || p.addr || '' }))
+  if (local.length) {
+    const food = local.filter((p) => p.kind === 'food')
+    return {
+      food: [...pick(food.filter((p) => p.cat !== '카페'), mealTier, 14), ...pick(food.filter((p) => p.cat === '카페'), cafeTier, 8)],
+      travel: pick(local.filter((p) => p.kind === 'travel'), sightTier, 14),
+      stay: [],
+    }
+  }
   const [w, s, e, n] = bbox
   const out = {}
   for (const k of ['food', 'travel', 'stay']) {
@@ -79,7 +103,7 @@ async function geminiCourse(cand, key, theme, cluster = false) {
   for (const k of ['stay', 'food', 'travel']) {
     for (const p of cand[k]) {
       byId.set(p.id, p)
-      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, fav: !!p.fav })
+      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, menu: p.menu || undefined, rest: p.hours?.rest || undefined, fav: !!p.fav })
     }
   }
   const hasFav = flat.some((f) => f.fav)
@@ -91,7 +115,8 @@ async function geminiCourse(cand, key, theme, cluster = false) {
     cluster ? '- 후보가 여러 지역에 흩어져 있을 수 있어. region 을 보고 "하루에 다닐 수 있는 가까운 곳들"로만 골라(멀리 떨어진 곳은 제외).' : '',
     hasFav ? '- fav:true 는 사용자가 즐겨찾기한 곳이야. 동선에 맞으면 적극적으로 우선 포함해줘.' : '',
     '- 숙소(kind=stay)가 있으면 1곳을 베이스캠프로 맨 처음에 넣어. 없으면 생략.',
-    '- 맛집(kind=food) 2~3곳, 관광지(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→저녁 느낌).',
+    '- 식사(kind=food, cat≠카페) 2곳(점심·저녁), 카페(cat=카페) 1곳, 구경(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→카페→구경→저녁 느낌). 후보가 모자라면 있는 만큼.',
+    '- 관광공사 소개 태그가 있는 곳은 이용시간이 확인된 곳이라 우선해. rest(쉬는 날)가 있으면 reason 끝에 "(○요일 휴무)"처럼 짧게 덧붙여.',
     '- since(영업 시작 연도, 오래될수록 검증된 곳)와 cat·tags 를 특징 근거로 참고해. 없는 정보(평점·후기 수 등)를 지어내지 마.',
     '- 각 stop 의 reason 은 한국어 한 문장, 친근하고 구체적으로.',
     '- title 은 이 동선을 한 줄로 표현(예: "성수 감성 한 바퀴"), summary 는 한 문장 소개.',
