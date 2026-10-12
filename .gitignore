@@ -11,3 +11,6 @@ src/data/gcache.json
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# 공공데이터 원본(대용량 CSV) — 저장소에 올리지 않음
+data_raw/
