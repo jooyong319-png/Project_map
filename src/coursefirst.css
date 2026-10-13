@@ -47,7 +47,11 @@
 
 /* 코스 타임라인 */
 .cf-course { display: flex; flex-direction: column; min-height: 100%; color: #1F1A17; }
-.cf-course-head { padding: 14px 24px; border-bottom: 1px solid #ECE4DB; }
+.cf-topbar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 18px 6px 24px; background: #FBF7F2; border-bottom: 1px solid #ECE4DB; }
+.cf-topbar .cf-back { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-reroll { flex-shrink: 0; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1.5px solid #E6DED5; background: #fff; color: #1F1A17; font-size: 13.5px; font-weight: 700; }
+.cf-reroll:hover { border-color: #C4561E; color: #A3461A; }
+.cf-course-head { padding: 12px 24px 14px; border-bottom: 1px solid #ECE4DB; }
 .cf-back { border: 0; background: none; color: #A3461A; font-size: 13.5px; font-weight: 600; padding: 8px 0; }
 .cf-kicker { margin-top: 4px; font-size: 12.5px; font-weight: 700; color: #A3461A; }
 .cf-title { margin-top: 6px; font-size: 21px; line-height: 1.35; font-weight: 800; letter-spacing: -.02em; }
@@ -96,6 +100,7 @@
   /* 헤더: '주변 맛집 둘러보기'를 로고와 한 줄에 */
   .header-search-slot:has(.cf-header-link) { order: 0; flex: 1 1 auto; flex-basis: auto; justify-content: flex-end; }
   .header-search-wrap.cf-header-link { width: auto; flex-wrap: nowrap; }
+  .cf-topbar { top: 30px; padding: 4px 14px 6px 20px; } /* 시트 드래그 핸들(30px) 바로 아래 */
   .cf-start { padding: 6px 20px 20px; }
   .cf-h1 { font-size: 27px; }
   /* half 상태에선 시트 아래가 화면 밖 → 하단 고정 버튼이 안 보이므로 목록 끝에 그냥 둔다 */

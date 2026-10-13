@@ -48,8 +48,12 @@ export default function CourseView({ course, loading, selected, onSelectStop, on
   const routeUrl = first ? `https://map.kakao.com/link/to/${encodeURIComponent(first.name)},${first.lat},${first.lng}` : ''
   return (
     <div className="cf-course">
-      <div className="cf-course-head">
+      {/* 스크롤해도 위에 붙는 줄 — 모바일 시트에선 [다른 코스]가 목록 끝이라 여기서도 바로 다시 짤 수 있게 */}
+      <div className="cf-topbar">
         <button type="button" className="cf-back" onClick={onBack}>‹ {summaryLabel || '다시 고르기'}</button>
+        <button type="button" className="cf-reroll" onClick={onReroll}>다시 짜기</button>
+      </div>
+      <div className="cf-course-head">
         <div className="cf-kicker">AI 추천 {course.evening ? '저녁' : '하루'} 코스 · {course.stops.length}곳</div>
         <h2 className="cf-title">{course.title}</h2>
         {course.summary && <p className="cf-summary">{course.summary}</p>}
