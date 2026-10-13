@@ -54,6 +54,9 @@ export default function CoursePanel({ course, loading, selected, onSelectStop, o
       ) : (
         <>
           {course.summary && <div className="course-summary">{course.summary}</div>}
+          {course.anchor && (
+            <div className="course-meta" style={{ margin: '4px 0' }}>📌 오늘의 중심: <b>{course.anchor.name}</b> · 주변 1km 안에서 골랐어요</div>
+          )}
           {course.start && (
             <div className="course-meta" style={{ margin: '4px 0 8px' }}>
               🚉 {course.start.label}에서 출발 · 첫 장소까지 도보 {fmtMin(course.start.walk?.min)}
@@ -86,6 +89,23 @@ export default function CoursePanel({ course, loading, selected, onSelectStop, o
               </Fragment>
             ))}
           </div>
+          {course.parking?.length > 0 && (
+            <div className="course-parking" style={{ margin: '12px 0 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,109,240,.07)' }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>🅿️ {course.anchor?.name || '코스'} 근처 주차장</div>
+              {course.parking.map((p) => (
+                <div key={p.name} className="course-meta" style={{ marginBottom: 4 }}>
+                  <b>{p.name}</b> <span style={{ color: p.type === '공영' ? '#2ea36b' : '#999' }}>{p.type}</span>
+                  {p.dist != null && ` · ${p.dist}m`}
+                  {p.fee ? ` · ${p.fee}` : ''}
+                  {p.hours?.wd ? ` · 평일 ${p.hours.wd}` : ''}
+                  {p.type !== '공영' && (p.url
+                    ? <> · <a href={p.url} target="_blank" rel="noreferrer">요금은 카카오맵에서</a></>
+                    : ' · 요금 현장 확인')}
+                </div>
+              ))}
+              <div className="course-meta" style={{ color: '#999', fontSize: 11 }}>공영: 전국주차장정보표준데이터 · 민영: 카카오 · 요금·운영시간은 바뀔 수 있어요</div>
+            </div>
+          )}
           {course.lodging && (
             <a
               className="course-lodging"

@@ -6,7 +6,7 @@
 // 환경변수: GEMINI_API_KEY (없으면 폴백), GEMINI_MODEL(선택, 기본 gemini-2.5-flash)
 
 import { seedAll } from '../lib/store.js'
-import { placesIn } from '../lib/areas.js'
+import { placesIn, parkingNear } from '../lib/areas.js'
 import { cachedEnrich, googleKey } from '../lib/gcache.js'
 import { enrichWithGoogle } from './kakao.js'
 
@@ -53,13 +53,24 @@ export const isEvening = (theme = '') => /저녁|밤|야경|퇴근|야간|나이
 const sightTier = (p) => (p.cat === '쇼핑' ? 0 : 1) // 관광지·문화시설 > 쇼핑(플래그십·편집숍)
 
 // 영역 안 후보를 모은다 — 정적 동네 데이터(공공데이터) 우선, 준비 안 된 동네는 DB(seed) 폴백
+// 중심 관광지 점수 — 티맵 연관(pop, scripts/enrichArea.mjs) + 관광공사 소개 + 관광지·문화시설(쇼핑보다 우선)
+const anchorScore = (p) => (p.pop || 0) + (curated(p) ? 5 : 0) + (p.cat === '쇼핑' ? 0 : 3)
+const ANCHOR_RADIUS = 1000 // 중심 관광지에서 이 거리(m) 안의 맛집·카페만
+
 async function gatherCandidates(bbox) {
   const local = placesIn(bbox).map((p) => ({ ...p, region: p.region || p.addr || '' }))
   if (local.length) {
-    const food = local.filter((p) => p.kind === 'food')
+    // ① 중심 관광지: 점수 상위 3곳 중 하나(다시 짜면 다른 중심) → ② 그 1km 안에서 맛집·카페·다른 구경거리
+    const sights = local.filter((p) => p.kind === 'travel').sort((a, b) => anchorScore(b) - anchorScore(a))
+    const anchor = sights.length ? shuffle(sights.slice(0, 3))[0] : null
+    const near = anchor ? local.filter((p) => p === anchor || haversine(anchor, p) <= ANCHOR_RADIUS) : local
+    const food = near.filter((p) => p.kind === 'food')
+    // 같은 tier 안에선 티맵 인기(pop) 있는 곳이 먼저 오도록 tier 에 소수점 가산
+    const withPop = (tier) => (p) => { const t = tier(p); return t < 0 ? t : t + Math.min(p.pop || 0, 9) / 10 }
     return {
-      food: [...pick(food.filter((p) => p.cat !== '카페'), mealTier, 14), ...pick(food.filter((p) => p.cat === '카페'), cafeTier, 8)],
-      travel: pick(local.filter((p) => p.kind === 'travel'), sightTier, 14),
+      anchor,
+      food: [...pick(food.filter((p) => p.cat !== '카페'), withPop(mealTier), 14), ...pick(food.filter((p) => p.cat === '카페'), withPop(cafeTier), 8)],
+      travel: [...(anchor ? [anchor] : []), ...pick(near.filter((p) => p.kind === 'travel' && p !== anchor), sightTier, 10)],
       stay: [],
     }
   }
@@ -102,6 +113,7 @@ function heuristicCourse(cand) {
 
 // Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, cluster=흩어진 후보를 가까운 것끼리.
 async function geminiCourse(cand, key, theme, cluster = false, from = null) {
+  const anchor = cand.anchor
   const evening = isEvening(theme)
   const byId = new Map()
   const flat = []
@@ -124,6 +136,7 @@ async function geminiCourse(cand, key, theme, cluster = false, from = null) {
       ? '- 저녁(18시 이후 시작) 코스야. 저녁 식사 1곳 → 걷기 좋은 곳·야경 1곳(있으면) → 와인바·바·이자카야·디저트 카페 중 1곳, 총 3~4곳. use(이용시간)를 보고 저녁에 문 닫는 곳(예: ~19:00 마감, 브런치·낮 카페)은 빼.'
       : '- 식사(kind=food, cat≠카페) 2곳(점심·저녁), 카페(cat=카페) 1곳, 구경(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→카페→구경→저녁 느낌). 후보가 모자라면 있는 만큼.',
     '- 서로 걸어서 15분 안쪽으로 이어지게 가까운 곳끼리 골라 (region·주소 참고).',
+    anchor ? `- 오늘의 중심 관광지는 "${anchor.name}"(id ${anchor.id})야. 반드시 코스에 넣고, 나머지는 그 주변으로 동선을 짜.` : '',
     from ? `- 출발점은 "${from.label}"이야. 첫 장소는 여기서 걸어서 가까운 곳으로 하고, 동선이 출발점에서 자연스럽게 이어지게 해. summary 에 출발점을 언급해.` : '',
     '- AI 픽 태그의 note 는 그 가게에 대한 참고 설명이야. 공공 타이틀(모범음식점·안심식당·착한가격·백년가게·노포)은 reason 에 자연스럽게 언급해도 돼.',
     '- 관광공사 소개 태그가 있는 곳은 이용시간이 확인된 곳이라 우선해. rest(쉬는 날)가 있으면 reason 끝에 "(○요일 휴무)"처럼 짧게 덧붙여.',
@@ -187,6 +200,27 @@ function walkLeg(a, b) {
   const d = haversine(a, b) * 1.3
   return { min: Math.max(1, Math.round(d / 75)), dist: Math.round(d) }
 }
+// 주차장 — 공영(전국주차장정보표준데이터, 요금·운영시간) + 민영(카카오 '주차장' 실시간 검색, 저장 안 함)
+async function parkingFor(at, kkey) {
+  if (!at) return null
+  const pub = parkingNear(at, 600).slice(0, 3).map((p) => ({ name: p.name, type: p.type || '공영', dist: Math.round(haversine(at, p)), spaces: p.spaces, fee: p.fee, hours: p.hours, lat: p.lat, lng: p.lng }))
+  let priv = []
+  if (kkey) {
+    try {
+      const r = await fetch(`https://dapi.kakao.com/v2/local/search/category.json?category_group_code=PK6&x=${at.lng}&y=${at.lat}&radius=500&sort=distance&size=8`, { headers: { Authorization: `KakaoAK ${kkey}` } })
+      if (r.ok) {
+        const pubNames = new Set(pub.map((p) => p.name.replace(/s+/g, '')))
+        priv = ((await r.json()).documents || [])
+          // 공영은 위에서(요금 있음), "○○ 전용주차장"은 손님·입주자만이라 제외
+          .filter((d) => !/공영|전용/.test(d.place_name) && !pubNames.has(d.place_name.replace(/s+/g, '')))
+          .slice(0, 3)
+          .map((d) => ({ name: d.place_name, type: '민영', dist: Number(d.distance) || null, url: d.place_url, lat: Number(d.y), lng: Number(d.x) }))
+      }
+    } catch (_) {}
+  }
+  return [...pub, ...priv]
+}
+
 // 차: 카카오모빌리티 자동차 길찾기 (기존 KAKAO_REST_KEY)
 async function carLeg(a, b, kkey) {
   if (!kkey) return null
@@ -251,6 +285,7 @@ export default async function handler(req, res) {
   let theme = (req.query?.theme || '').toString().slice(0, 80)
   // 출발점(역·장소) — 런처에서 역을 고르면 옴
   const fx = Number(req.query?.fx), fy = Number(req.query?.fy)
+  const car = req.query?.car === '1'
   const from = req.query?.from && Number.isFinite(fx) && Number.isFinite(fy) ? { label: req.query.from.toString().slice(0, 40), lng: fx, lat: fy } : null
   let bbox = parseBbox(req.query?.bbox)
   let favs = []
@@ -307,6 +342,9 @@ export default async function handler(req, res) {
       const gkey = googleKey()
       if (gkey) course.stops = await cachedEnrich(course.stops, course.stops.length, (it) => enrichWithGoogle(it, gkey))
     }
+    // 중심 관광지 · 주차장(🚗 차로 가요)
+    if (cand.anchor) course.anchor = { id: cand.anchor.id, name: cand.anchor.name }
+    if (car) course.parking = await parkingFor(cand.anchor || course.stops?.[0], process.env.KAKAO_REST_KEY)
     // 출발점 → 첫 장소 도보
     if (from && course.stops?.length) course.start = { label: from.label, walk: walkLeg(from, course.stops[0]) }
     // 구간별 이동시간(차/대중교통/도보)

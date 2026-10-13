@@ -18,6 +18,7 @@ import { parse } from 'csv-parse'
 import proj4 from 'proj4'
 import { catFromKakao, ICON_BY_CAT, KIND_ICON } from '../api/kakao.js'
 import { normName } from '../lib/naver.js'
+import { enrich } from './enrichArea.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -275,6 +276,7 @@ async function main() {
   fs.writeFileSync(path.join(outDir, `${slug}.json`), JSON.stringify(data) + '\n', 'utf8')
   const kinds = places.reduce((m, p) => ((m[p.kind] = (m[p.kind] || 0) + 1), m), {})
   console.log(`→ src/data/places/${slug}.json: ${places.length}곳`, kinds, `(${((Date.now() - t0) / 1000).toFixed(0)}초)`)
+  await enrich(slug) // 인기 점수(연관 관광지) + 주차장
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

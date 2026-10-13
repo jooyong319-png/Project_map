@@ -21,6 +21,7 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
   // loc: null | {type:'current'} | {type:'fav'} | {type:'region', center, label}
   const [loc, setLoc] = useState(null)
   const [theme, setTheme] = useState('')
+  const [car, setCar] = useState(false) // 🚗 차로 가요 → 주차장(공영·민영) 함께
 
   useEffect(() => {
     if (pickedRef.current) { pickedRef.current = false; setSugs([]); return } // 고른 직후엔 스킵
@@ -40,9 +41,9 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
   const submit = () => {
     if (!loc) return
     const th = theme.trim()
-    if (loc.type === 'current') onUseCurrent(th)
-    else if (loc.type === 'fav') onUseFav(th)
-    else onLaunch(loc.center, loc.label, th, loc.spot)
+    if (loc.type === 'current') onUseCurrent(th, car)
+    else if (loc.type === 'fav') onUseFav(th, car)
+    else onLaunch(loc.center, loc.label, th, loc.spot, car)
   }
   const btnLabel = loc?.type === 'fav' ? '즐겨찾기로 코스 짜기'
     : loc ? `'${loc.label}' 코스 짜기`
@@ -117,6 +118,10 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
             <button key={t} className={`cl-chip ${theme === t ? 'on' : ''}`} onClick={() => setTheme(t)}>{t}</button>
           ))}
         </div>
+
+        <button className={`cl-chip ${car ? 'on' : ''}`} style={{ marginTop: 10 }} onClick={() => setCar((c) => !c)} aria-pressed={car}>
+          🚗 차로 가요 {car ? '· 주차장도 알려드려요' : ''}
+        </button>
 
         <button className="cl-submit" onClick={submit} disabled={!loc}>🧭 {btnLabel}</button>
       </div>
