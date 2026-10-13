@@ -36,9 +36,10 @@ function makeIcon(d, i, animate = true) {
 }
 
 // AI 코스 번호 핀 (종류별 색)
-const COURSE_COLOR = { food: '#f0792e', travel: '#2ea36b', stay: '#7c5cff' }
-function courseIcon(order, kind, active) {
-  const c = COURSE_COLOR[kind] || '#f0792e'
+// 코스 핀 색 — 타임라인(CourseView)과 같게: 식사=주황, 카페=갈색, 구경=초록
+const COURSE_COLOR = { food: '#C4561E', cafe: '#7A5232', travel: '#2F7D55', stay: '#7c5cff' }
+function courseIcon(order, kind, active, cat) {
+  const c = (kind === 'food' && cat === '카페' ? COURSE_COLOR.cafe : COURSE_COLOR[kind]) || COURSE_COLOR.food
   return L.divIcon({
     className: 'mk-wrap',
     html: `<div class="course-pin${active ? ' on' : ''}" style="background:${c}">${order}</div>`,
@@ -58,8 +59,13 @@ function FitCourse({ stops }) {
     if (key === ref.current) return
     ref.current = key
     const pts = stops.map((s) => [s.lat, s.lng])
+    // 코스 패널이 지도를 가리는 쪽만큼 여백 — 웹: 왼쪽 420px 패널 / 모바일: 아래 절반 시트
+    const size = map.getSize()
+    const pad = size.x > 820
+      ? { paddingTopLeft: [470, 70], paddingBottomRight: [70, 70] }
+      : { paddingTopLeft: [40, 40], paddingBottomRight: [40, Math.round(size.y * 0.5) + 30] }
     if (pts.length === 1) map.setView(pts[0], 15)
-    else map.fitBounds(pts, { padding: [70, 70], maxZoom: 16 })
+    else map.fitBounds(pts, { ...pad, maxZoom: 16 })
   }, [stops, map])
   return null
 }
@@ -230,7 +236,7 @@ export default function MapView({ items, selected, onSelect, onSearchArea, onBou
             <Marker
               key={`c_${s.id}`}
               position={[s.lat, s.lng]}
-              icon={courseIcon(s.order, s.kind, selected === s.id)}
+              icon={courseIcon(s.order, s.kind, selected === s.id, s.cat)}
               eventHandlers={{ click: () => onSelect && onSelect(s) }}
               zIndexOffset={1000}
             >

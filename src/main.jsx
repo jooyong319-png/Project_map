@@ -6,6 +6,7 @@ import Home from './pages/Home.jsx'
 import Privacy from './pages/Privacy.jsx'
 import AccountDelete from './pages/AccountDelete.jsx'
 import './index.css'
+import './coursefirst.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

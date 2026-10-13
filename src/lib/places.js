@@ -7,12 +7,12 @@ export function isKorea(lat, lng) {
 
 // AI 코스 짜기 — 지도 영역(bbox)+테마로 하루 동선을 받아온다.
 // from = { label, lng, lat } — 역·장소에서 출발할 때(첫 장소를 거기서 가깝게, 도보 시간 표시)
-// car = 🚗 차로 가요 → 응답에 주차장(parking)
-export async function getCourse(bbox, theme = '', from = null, car = false) {
+// car = 🚗 차로 가요 → 응답에 주차장(parking) / time = 'day' | 'evening'
+export async function getCourse(bbox, theme = '', from = null, car = false, time = 'day') {
   try {
     const t = theme ? `&theme=${encodeURIComponent(theme)}` : ''
     const f = from ? `&from=${encodeURIComponent(from.label)}&fx=${from.lng}&fy=${from.lat}` : ''
-    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}${car ? '&car=1' : ''}`)
+    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}${car ? '&car=1' : ''}&time=${time}`)
     if (res.ok) return (await res.json()).course || null
   } catch (_) {}
   return null

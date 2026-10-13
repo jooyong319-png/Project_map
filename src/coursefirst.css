@@ -1,0 +1,103 @@
+/* ===== 코스 퍼스트 화면 (2026-10-13, 시안: 콕콕콕 코스 퍼스트 시안) =====
+   .wrap.cf = 시작 폼·코스 타임라인 모드. 웹: 왼쪽 420px 패널 + 지도 / 모바일: 바텀시트
+   색: 바탕 #FBF7F2 · 글자 #1F1A17 · 보조 #5E554E · 선 #E6DED5 · 강조 #C4561E(글자용 #A3461A) · 구경 #2F7D55 · 카페 #7A5232 */
+.wrap.cf { height: calc(100vh - 120px); height: calc(100dvh - 120px); min-height: 620px; max-width: 1280px; }
+.wrap.cf .results {
+  top: 0; left: 0; bottom: 0; width: 420px; max-width: 100%; padding: 0; border-radius: 0;
+  background: #FBF7F2; backdrop-filter: none; box-shadow: 1px 0 0 #ECE4DB;
+}
+.wrap.cf .list-toggle { display: none; }
+.wrap.cf .mapwrap { position: absolute; inset: 0; min-height: 0; } /* 지도가 패널 높이만큼 꽉 */
+.wrap.cf .area-search-wrap { display: none; } /* '이 지역에서 찾기'·종류 버튼은 둘러보기 전용 */
+.wrap.cf .detail-panel { left: 432px; }
+.cf-header-link { justify-content: flex-end; }
+.cf-link { border: 0; background: none; color: #A3461A; font-size: inherit; font-weight: 600; padding: 8px 0; cursor: pointer; }
+.cf-link:hover { color: #7E3412; }
+
+/* 시작 폼 */
+.cf-start { display: flex; flex-direction: column; min-height: 100%; padding: 28px 26px 20px; color: #1F1A17; }
+.cf-h1 { font-size: 30px; line-height: 1.25; font-weight: 800; letter-spacing: -.03em; }
+.cf-lead { margin-top: 10px; font-size: 15px; line-height: 1.6; color: #5E554E; }
+.cf-label { display: block; margin: 24px 0 10px; font-size: 13px; font-weight: 700; color: #5E554E; }
+.cf-label span { font-weight: 400; color: #8A8079; }
+.cf-search { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; background: #fff; border: 1.5px solid #E6DED5; border-radius: 14px; }
+.cf-search:focus-within { border-color: #C4561E; }
+.cf-search input { flex: 1; min-width: 0; border: 0; outline: 0; font: inherit; font-size: 16px; background: transparent; color: #1F1A17; }
+.cf-sugs { margin-top: 6px; background: #fff; border: 1px solid #E6DED5; border-radius: 12px; max-height: 240px; overflow-y: auto; }
+.cf-sug { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 14px; border: 0; border-bottom: 1px solid #F1EBE4; background: none; text-align: left; font-size: 14.5px; color: #1F1A17; }
+.cf-sug:last-child { border-bottom: 0; }
+.cf-sug:hover { background: #FBF7F2; }
+.cf-sug-sub { margin-left: auto; font-size: 12px; color: #8A8079; text-align: right; }
+.cf-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.cf-label + .cf-chips { margin-top: 0; }
+.cf-chip { min-height: 38px; padding: 0 15px; border-radius: 19px; border: 1.5px solid #E6DED5; background: #fff; color: #3B342F; font-size: 14px; }
+.cf-chip:hover { border-color: #D3C6B9; }
+.cf-chip.on { border-color: #C4561E; background: #FFF1E8; color: #A3461A; font-weight: 700; }
+.cf-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px; background: #F1EBE4; border-radius: 14px; }
+.cf-seg button { height: 44px; border: 0; border-radius: 11px; background: transparent; color: #5E554E; font-size: 15px; }
+.cf-seg button.on { background: #fff; color: #1F1A17; font-weight: 700; box-shadow: 0 1px 2px rgba(31, 26, 23, .08); }
+.cf-car { margin-top: 22px; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 0 16px; background: #fff; border: 1.5px solid #E6DED5; border-radius: 14px; font-size: 15px; cursor: pointer; }
+.cf-car small { margin-left: 4px; font-size: 13px; color: #8A8079; }
+.cf-car input { width: 22px; height: 22px; accent-color: #C4561E; flex-shrink: 0; }
+.cf-grow { flex: 1; min-height: 24px; }
+.cf-submit { width: 100%; height: 56px; border: 0; border-radius: 16px; background: #C4561E; color: #fff; font-size: 17px; font-weight: 800; }
+.cf-submit:hover:not(:disabled) { background: #A9481A; }
+.cf-submit:disabled { background: #E6DED5; color: #6E655E; cursor: default; }
+.cf-foot { margin-top: 10px; text-align: center; font-size: 12.5px; color: #6E655E; }
+
+/* 코스 타임라인 */
+.cf-course { display: flex; flex-direction: column; min-height: 100%; color: #1F1A17; }
+.cf-course-head { padding: 14px 24px; border-bottom: 1px solid #ECE4DB; }
+.cf-back { border: 0; background: none; color: #A3461A; font-size: 13.5px; font-weight: 600; padding: 8px 0; }
+.cf-kicker { margin-top: 4px; font-size: 12.5px; font-weight: 700; color: #A3461A; }
+.cf-title { margin-top: 6px; font-size: 21px; line-height: 1.35; font-weight: 800; letter-spacing: -.02em; }
+.cf-summary { margin-top: 8px; font-size: 14px; line-height: 1.6; color: #5E554E; }
+.cf-anchor { margin-top: 12px; padding: 9px 12px; background: #F3F7F1; border-radius: 10px; font-size: 13.5px; color: #2E5A3A; }
+.cf-start-line { margin-top: 8px; font-size: 13px; color: #5E554E; }
+.cf-loading { padding: 60px 20px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #5E554E; font-size: 14px; }
+.cf-loading .spin.dark { width: 16px; height: 16px; border: 2px solid #E6DED5; border-top-color: #C4561E; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
+.cf-timeline { list-style: none; padding: 16px 18px 6px; }
+.cf-stop { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 8px; }
+.cf-rail { display: flex; flex-direction: column; align-items: center; padding-top: 6px; }
+.cf-num { width: 30px; height: 30px; border-radius: 15px; color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.cf-num.anchor { box-shadow: 0 0 0 3px #FFE2D1; }
+.cf-line { flex: 1; width: 2px; background: #E6DED5; margin: 4px 0; }
+.cf-body { min-width: 0; }
+.cf-stop-btn { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; border: 0; background: none; padding: 6px 10px 8px; border-radius: 12px; color: inherit; }
+.cf-stop-btn:hover { background: rgba(31, 26, 23, .04); }
+.cf-stop-btn.on { background: #fff; box-shadow: 0 0 0 1.5px #C4561E; }
+.cf-when { font-size: 13px; font-weight: 700; }
+.cf-name { font-size: 17px; font-weight: 800; color: #1F1A17; }
+.cf-hours { font-size: 13px; color: #5E554E; }
+.cf-warn { font-size: 12.5px; font-weight: 600; color: #A3461A; }
+.cf-reason { margin-top: 4px; font-size: 14px; line-height: 1.6; color: #3B342F; }
+.cf-leg { padding: 4px 10px 14px; font-size: 12.5px; color: #6E655E; }
+.cf-parking { margin: 6px 18px 0; padding: 14px 16px; background: #fff; border-radius: 16px; display: flex; flex-direction: column; gap: 8px; }
+.cf-parking-title { font-size: 15px; font-weight: 800; }
+.cf-parking-row { display: flex; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap; font-size: 13.5px; }
+.cf-parking-row em { font-style: normal; font-size: 12px; color: #6E655E; }
+.cf-parking-row em.pub { color: #2E6B48; }
+.cf-parking-meta { color: #5E554E; }
+.cf-parking-meta a { color: #A3461A; }
+.cf-parking-src { font-size: 11.5px; color: #6E655E; }
+.cf-note { margin: 10px 20px 0; font-size: 12px; color: #6E655E; }
+.cf-actions { position: sticky; bottom: 0; margin-top: auto; padding: 12px 18px 18px; background: #FBF7F2; border-top: 1px solid #ECE4DB; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cf-btn { height: 50px; border-radius: 14px; border: 1.5px solid #E6DED5; background: #fff; color: #1F1A17; font-size: 14.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.cf-btn:hover { border-color: #D3C6B9; }
+.cf-btn.primary { border: 0; background: #C4561E; color: #fff; }
+.cf-btn.primary:hover { background: #A9481A; }
+
+@media (max-width: 760px) {
+  .wrap.cf { height: calc(100vh - 64px); height: calc(100dvh - 64px); min-height: 420px; max-width: none; }
+  .wrap.cf .results { top: auto; width: 100%; height: 92%; padding: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(25, 22, 18, .16); }
+  .wrap.cf .sheet-handle { background: #FBF7F2; }
+  .wrap.cf .detail-panel { left: 0; }
+  .wrap.cf .locate-btn { z-index: 5; } /* 시트(10) 아래로 — 시작 폼 위에 뜨지 않게 */
+  /* 헤더: '주변 맛집 둘러보기'를 로고와 한 줄에 */
+  .header-search-slot:has(.cf-header-link) { order: 0; flex: 1 1 auto; flex-basis: auto; justify-content: flex-end; }
+  .header-search-wrap.cf-header-link { width: auto; flex-wrap: nowrap; }
+  .cf-start { padding: 6px 20px 20px; }
+  .cf-h1 { font-size: 27px; }
+  /* half 상태에선 시트 아래가 화면 밖 → 하단 고정 버튼이 안 보이므로 목록 끝에 그냥 둔다 */
+  .cf-actions { position: static; }
+}

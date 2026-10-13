@@ -63,6 +63,31 @@ const closesEarly = (p) => {
 }
 const ANCHOR_RADIUS = 1000 // 중심 관광지에서 이 거리(m) 안의 맛집·카페만
 
+// 예상 시각(time "HH:MM")이 이용시간 안인지 — true/false, 시간 정보가 없거나 못 읽으면 null
+//  "11:30~21:00", "매일 11:00 - 21:00", "17:00~02:00"(자정 넘김) 처럼 적힌 구간을 모두 본다
+const toMin = (h, m) => (+h) * 60 + (+m)
+function openAt(use, time) {
+  const t = /^(\d{1,2}):(\d{2})$/.exec(time || '')
+  if (!t || !use) return null
+  const ranges = [...String(use).matchAll(/(\d{1,2}):(\d{2})\s*[~\-–]\s*(\d{1,2}):(\d{2})/g)]
+  if (!ranges.length) return null
+  const at = toMin(t[1], t[2])
+  return ranges.some((m) => {
+    const a = toMin(m[1], m[2]); let b = toMin(m[3], m[4])
+    if (b <= a) b += 24 * 60 // 자정 넘김
+    return (at >= a && at <= b) || (at + 24 * 60 >= a && at + 24 * 60 <= b)
+  })
+}
+// 시각 채우기 + 검사: AI 가 빠뜨렸거나 폴백 코스면 시작 시각부터 90분 간격
+function fillTimes(stops, evening) {
+  let cur = evening ? toMin(18, 30) : toMin(12, 0)
+  for (const s of stops || []) {
+    if (!s.time) s.time = `${String(Math.floor(cur / 60) % 24).padStart(2, '0')}:${String(cur % 60).padStart(2, '0')}`
+    const [h, m] = s.time.split(':'); cur = toMin(h, m) + 90
+    s.timeOk = openAt(s.hours?.use, s.time)
+  }
+}
+
 async function gatherCandidates(bbox, evening = false) {
   const local = placesIn(bbox).map((p) => ({ ...p, region: p.region || p.addr || '' })).filter((p) => !(evening && closesEarly(p)))
   if (local.length) {
@@ -103,9 +128,8 @@ function heuristicCourse(cand) {
 }
 
 // Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, from=출발점(역)
-async function geminiCourse(cand, key, theme, from = null) {
+async function geminiCourse(cand, key, theme, from = null, evening = isEvening(theme)) {
   const anchor = cand.anchor
-  const evening = isEvening(theme)
   const byId = new Map()
   const flat = []
   for (const k of ['stay', 'food', 'travel']) {
@@ -130,6 +154,7 @@ async function geminiCourse(cand, key, theme, from = null) {
     '- 관광공사 소개 태그가 있는 곳은 이용시간이 확인된 곳이라 우선해. rest(쉬는 날)가 있으면 reason 끝에 "(○요일 휴무)"처럼 짧게 덧붙여.',
     '- since(영업 시작 연도, 오래될수록 검증된 곳)와 cat·tags 를 특징 근거로 참고해. 없는 정보(평점·후기 수 등)를 지어내지 마.',
     '- 각 stop 의 reason 은 한국어 한 문장, 친근하고 구체적으로.',
+    `- 각 stop 에 time(도착 예상 시각, 24시간제 "HH:MM")을 넣어. ${evening ? '18:30 전후' : '12:00 전후'}에 시작하고, 식사·카페는 약 1시간, 구경은 1~1.5시간 머문다고 보고 이동 시간을 더해. use(이용시간)가 있으면 그 안에 들어오게 순서와 시각을 맞춰.`,
     '- title 은 이 동선을 한 줄로 표현(예: "성수 감성 한 바퀴"), summary 는 한 문장 소개.',
     th ? `- 사용자가 원하는 테마: "${th}". 이 테마 분위기에 맞게 장소를 고르고, 순서·이유·제목에도 테마를 자연스럽게 반영해.` : '',
     '후보:',
@@ -150,8 +175,8 @@ async function geminiCourse(cand, key, theme, from = null) {
             type: 'ARRAY',
             items: {
               type: 'OBJECT',
-              properties: { id: { type: 'STRING' }, reason: { type: 'STRING' } },
-              required: ['id', 'reason'],
+              properties: { id: { type: 'STRING' }, reason: { type: 'STRING' }, time: { type: 'STRING' } },
+              required: ['id', 'reason', 'time'],
             },
           },
         },
@@ -169,7 +194,7 @@ async function geminiCourse(cand, key, theme, from = null) {
   const parsed = JSON.parse(txt)
   // id → 실재하는 우리 데이터(좌표 포함)로 복원. 모르는 id 는 버림.
   const stops = (parsed.stops || [])
-    .map((s) => { const p = byId.get(s.id); return p ? { ...p, reason: s.reason } : null })
+    .map((s) => { const p = byId.get(s.id); return p ? { ...p, reason: s.reason, time: /^\d{1,2}:\d{2}$/.test(s.time || '') ? s.time.padStart(5, '0') : undefined } : null })
     .filter(Boolean)
     .map((p, i) => ({ ...p, order: i + 1 }))
   if (!stops.length) throw new Error('gemini 가 후보를 못 골랐음')
@@ -260,7 +285,9 @@ export default async function handler(req, res) {
   const bbox = parseBbox(req.query?.bbox)
   try {
     if (!bbox) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
-    const cand = await gatherCandidates(bbox, isEvening(theme))
+    // 낮/저녁: 화면의 '언제' 버튼(time=evening) 또는 테마 글자(저녁·밤·야경…)
+    const evening = req.query?.time === 'evening' || isEvening(theme)
+    const cand = await gatherCandidates(bbox, evening)
     const total = cand.food.length + cand.travel.length + cand.stay.length
     if (total < 2) { res.status(200).json({ course: null, reason: 'empty' }); return }
     const key = process.env.GEMINI_API_KEY
@@ -268,7 +295,7 @@ export default async function handler(req, res) {
     if (key) {
       // 일시적 실패(혼잡/타임아웃) 대비 최대 3회 재시도 후에만 휴리스틱 폴백
       for (let i = 0; i < 3 && !course; i++) {
-        try { course = await geminiCourse(cand, key, theme, from) }
+        try { course = await geminiCourse(cand, key, theme, from, evening) }
         catch (_) { if (i < 2) await new Promise((r) => setTimeout(r, 400 * (i + 1))) }
       }
       if (!course) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // 3회 다 실패 → 자동 구성
@@ -276,6 +303,8 @@ export default async function handler(req, res) {
       course = heuristicCourse(cand)
     }
     if (!course) { res.status(200).json({ course: null, reason: 'empty' }); return }
+    course.evening = evening
+    fillTimes(course.stops, evening) // 예상 시각 채우기 + 이용시간 안인지(timeOk)
     // 중심 관광지 · 주차장(🚗 차로 가요)
     if (cand.anchor) course.anchor = { id: cand.anchor.id, name: cand.anchor.name }
     if (car) course.parking = await parkingFor(cand.anchor || course.stops?.[0], process.env.KAKAO_REST_KEY)

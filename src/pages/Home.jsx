@@ -4,8 +4,8 @@ import FilterBar from '../components/FilterBar.jsx'
 import RestaurantList from '../components/RestaurantList.jsx'
 import GeoPanel from '../components/GeoPanel.jsx'
 import DetailModal from '../components/DetailModal.jsx'
-import CourseLauncher from '../components/CourseLauncher.jsx'
-import CoursePanel from '../components/CoursePanel.jsx'
+import StartPanel from '../components/StartPanel.jsx'
+import CourseView from '../components/CourseView.jsx'
 import { getRestaurants, getCourse } from '../lib/places.js'
 
 const REGION_FOCUS_BOOST = 1.5 // 지역 선택 후 이동 시 추가로 줌인하는 양
@@ -39,7 +39,7 @@ export default function Home() {
   const [filtersOpen, setFiltersOpen] = useState(false) // 검색·필터 패널
   const [peek, setPeek] = useState(false) // 검색 시 잠깐 패널 반투명(지도 들여다보기)
   const [mapMoving, setMapMoving] = useState(false) // 지도 이동/줌 중 → 리스트·상세 반투명
-  const [mapZoom, setMapZoom] = useState(0) // 현재 지도 줌. '지금 보고 있는 지역' 활성 조건용
+
   const [notice, setNotice] = useState('') // 잠깐 뜨는 안내(브라우저 alert 대신)
   const peekTimer = useRef(null)
   const mapBoundsRef = useRef(null) // 현재 지도 영역(검색 기준)
@@ -57,7 +57,9 @@ export default function Home() {
   const [pickedLabel, setPickedLabel] = useState('') // 고른 지역 라벨
   const [course, setCourse] = useState(null) // AI 코스(동선)
   const [courseLoading, setCourseLoading] = useState(false)
-  const [courseLauncher, setCourseLauncher] = useState(false)
+  // 화면 모드: 'start'(어디서 데이트해요?) → 'course'(타임라인) / 'browse'(예전 장소 검색)
+  const [mode, setMode] = useState('start')
+  const [lastReq, setLastReq] = useState(null) // 마지막 코스 조건 — '다른 코스'·뒤로가기 때 폼 복원
   const pendingCourseRef = useRef(null) // 지역 이동 후 도착하면 그 bbox 로 코스 생성
 
   const say = (msg) => { setNotice(msg); setTimeout(() => setNotice(''), 2600) }
@@ -97,8 +99,10 @@ export default function Home() {
     if (hit) { setSelectedId(hit.id); setOpenItem(hit) }
   }, [items])
 
-  // 코스가 뜨면 모바일 바텀시트를 중간 크기로 (지도+코스 같이 보이게)
-  useEffect(() => { if (course || courseLoading) setSheet('half') }, [course, courseLoading])
+  // 모바일 바텀시트: 시작 화면은 꽉 채우고, 코스·둘러보기는 지도와 같이 보이게 중간
+  useEffect(() => { setSheet(mode === 'start' ? 'full' : 'half') }, [mode])
+  // 화면이 바뀌면 패널 스크롤을 맨 위로 — 시작 폼에서 내려간 위치가 코스 화면에 남지 않게
+  useEffect(() => { sheetRef.current?.scrollTo?.(0, 0) }, [mode, course])
 
   // 리스트 시트 첫 진입 슬라이드 업
   useEffect(() => {
@@ -111,7 +115,7 @@ export default function Home() {
   // 상황에 맞춰 바뀌는 리스트 제목
   const title = useMemo(() => {
     if (course || courseLoading) return { prefix: '🧭 AI 추천 코스', suffix: '' }
-    if (search.tick === 0) return { prefix: '🧭 동네만 콕, 하루 코스는 AI가', suffix: '' }
+    if (search.tick === 0) return { prefix: '주변 맛집 둘러보기', suffix: '' }
     if (search.q) return { prefix: `'${search.q}'`, suffix: '검색결과' }
     return { prefix: NOUN[search.kind] || '장소', suffix: `${search.lim}곳` }
   }, [search, course, courseLoading])
@@ -122,9 +126,9 @@ export default function Home() {
     mapBoundsRef.current = b
     // 지역 이동 후 도착하면(지도가 영역 보고) 그때 AI 코스 / 일반 검색
     if (pendingCourseRef.current) {
-      const { bbox, theme, from, car } = pendingCourseRef.current
+      const { bbox, theme, from, car, time } = pendingCourseRef.current
       pendingCourseRef.current = null
-      onCourse(bbox, theme, from, car)
+      onCourse(bbox, theme, from, car, time)
       return
     }
     if (pendingSearchRef.current) {
@@ -189,14 +193,14 @@ export default function Home() {
   }
 
   // 🧭 AI 코스 짜기 — 지역 + 테마(선택) + 출발점(역) + 차
-  const onCourse = async (bbox, theme = '', from = null, car = false) => {
+  const onCourse = async (bbox, theme = '', from = null, car = false, time = 'day') => {
     setCourseLoading(true)
     setCourse(null)
-    setSheet('half') // 모바일: 지도+코스 같이 보이는 중간 크기로
     try {
-      const c = await getCourse(bbox, theme, from, car)
+      const c = await getCourse(bbox, theme, from, car, time)
       if (!c || !c.stops?.length) {
         setCourse(null)
+        setMode('start')
         say('이 동네는 아직 코스 데이터가 준비 중이에요 🙏 성수·용산·종로·천안에서 먼저 써 보세요')
         return null
       }
@@ -207,22 +211,41 @@ export default function Home() {
       setCourseLoading(false)
     }
   }
-  const onClearCourse = () => { setCourse(null); setCourseLoading(false) }
-  // 런처에서 지역+테마 선택 → 그 동네로 날아가 도착하면 코스 생성(onBoundsChange 에서 트리거)
-  //  spot(역·장소) = 그 지점에서 걸어서 다닐 범위(±약 1.2km)로 좁히고, 출발점(from)으로 넘긴다
-  const launchCourse = (center, label, theme = '', spot = false, car = false) => {
-    setCourseLauncher(false)
+  // 코스 요청(시작 폼 값) → 실제 요청 조건으로. spot(역·장소)은 그 지점 걸어서 다닐 범위(±약 1.2km) + 출발점(from)
+  const reqOf = (r) => {
+    const d = r.spot ? 0.012 : 0.02 // 역 ≈1.2km / 동네 ≈2km 박스
+    const c = r.center
+    return { bbox: [c[0] - d, c[1] - d, c[0] + d, c[1] + d], theme: r.theme, car: r.car, time: r.time, from: r.spot ? { label: r.label, lng: c[0], lat: c[1] } : null }
+  }
+  // 시작 폼 제출 → 그 동네로 날아가 도착하면 코스 생성(onBoundsChange 에서 트리거)
+  const startCourse = (r) => {
+    if (aiUsedUp()) { say(`오늘 AI 코스는 ${AI_PER_DAY}번까지예요. 내일 다시 만나요 🧭`); return }
+    setLastReq(r)
+    setPickedLabel(r.label || '')
+    setMode('course')
     setCourse(null)
-    setPickedLabel(label || '')
-    const d = spot ? 0.012 : 0.02 // 역 ≈1.2km / 동네 ≈2km 박스
-    pendingCourseRef.current = { bbox: [center[0] - d, center[1] - d, center[0] + d, center[1] + d], theme, car, from: spot ? { label, lng: center[0], lat: center[1] } : null }
-    setNavTo({ center, zoom: 15 })
+    setCourseLoading(true)
+    setOpenItem(null)
+    pendingCourseRef.current = reqOf(r)
+    setNavTo({ center: r.center, zoom: 15 })
+    // 이미 그 자리에 있으면 지도가 '도착(moveend)'을 안 보낼 수 있다 → 잠시 뒤에도 남아 있으면 바로 요청
+    setTimeout(() => {
+      const p = pendingCourseRef.current
+      if (!p) return
+      pendingCourseRef.current = null
+      onCourse(p.bbox, p.theme, p.from, p.car, p.time)
+    }, 1600)
   }
-  // [지금 보고 있는 지역] 현재 지도 영역으로 바로 코스
-  const onCourseHere = (theme = '', car = false) => {
-    setCourseLauncher(false)
-    if (mapBoundsRef.current) onCourse(mapBoundsRef.current, theme, null, car)
+  // 다른 코스 — 같은 조건으로 바로 다시(지도는 그대로)
+  const reroll = () => {
+    if (!lastReq) return
+    if (aiUsedUp()) { say(`오늘 AI 코스는 ${AI_PER_DAY}번까지예요. 내일 다시 만나요 🧭`); return }
+    const q = reqOf(lastReq)
+    setOpenItem(null)
+    onCourse(q.bbox, q.theme, q.from, q.car, q.time)
   }
+  const backToStart = () => { setCourse(null); setCourseLoading(false); setOpenItem(null); setMode('start') }
+  const summaryLabel = lastReq ? [lastReq.label, lastReq.time === 'evening' ? '저녁' : '낮', lastReq.mood && ({ cafe: '감성 카페', food: '맛집 투어', walk: '산책', art: '전시·구경', hanok: '한옥·골목' })[lastReq.mood]].filter(Boolean).join(' · ') : ''
 
   // 검색바 자동완성: 타이핑하면 전국 가게를 카카오로 제안
   useEffect(() => {
@@ -307,7 +330,12 @@ export default function Home() {
     setRegionTarget({ center: [s.lng, s.lat], zoom: s.zoom })
   }
 
-  // 검색바 + AI 코스 + 필터 아이콘 (헤더로 포털)
+  // 헤더 슬롯 — 시작·코스 화면: '주변 맛집 둘러보기' 링크 / 둘러보기: 검색바 + 코스 짜기 + 필터
+  const headerLink = (
+    <div className="header-search-wrap cf-header-link">
+      <button type="button" className="cf-link" onClick={() => { setMode('browse'); setOpenItem(null) }}>주변 맛집 둘러보기</button>
+    </div>
+  )
   const searchBar = (
     <div className="header-search-wrap">
       <form className="search" onSubmit={(e) => { e.preventDefault(); e.currentTarget.querySelector('input')?.blur(); runTextSearch() }}>
@@ -336,9 +364,8 @@ export default function Home() {
       </form>
       <div className="hdr-ai-wrap">
         <button
-          className={`hdr-ai ${courseLauncher ? 'on' : ''}`}
-          onClick={() => { if (aiUsedUp()) { say(`오늘 AI 코스는 ${AI_PER_DAY}번까지예요. 내일 다시 만나요 🧭`); return } setCourseLauncher((o) => !o) }}
-          aria-expanded={courseLauncher}
+          className="hdr-ai"
+          onClick={() => { setMode('start'); setOpenItem(null) }}
           title="AI 코스 짜기"
         >
           <span className="hdr-ai-ic">🧭</span>
@@ -359,17 +386,7 @@ export default function Home() {
 
   return (
     <>
-      {headerSlot && createPortal(searchBar, headerSlot)}
-
-      {/* AI 코스 런처 — 헤더 backdrop-filter 영향을 피해 본문에서 렌더(fixed 가 뷰포트 기준이 되게) */}
-      {courseLauncher && (
-        <CourseLauncher
-          onLaunch={launchCourse}
-          onUseCurrent={onCourseHere}
-          hasCurrent={!!mapBoundsRef.current && mapZoom >= 12}
-          onClose={() => setCourseLauncher(false)}
-        />
-      )}
+      {headerSlot && createPortal(mode === 'browse' ? searchBar : headerLink, headerSlot)}
 
       {filtersOpen && <div className="filter-backdrop" onClick={() => setFiltersOpen(false)} />}
       <div className={`filterpanel ${filtersOpen ? 'open' : ''}`}>
@@ -390,13 +407,15 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="count">
-        <span className="count-title">
-          {title.prefix}{title.suffix && <> <b>{title.suffix}</b></>}
-        </span>
-      </div>
+      {mode === 'browse' && (
+        <div className="count">
+          <span className="count-title">
+            {title.prefix}{title.suffix && <> <b>{title.suffix}</b></>}
+          </span>
+        </div>
+      )}
 
-      <div className={`wrap ${listOpen ? '' : 'collapsed'} ${peek ? 'peeking' : ''} ${openItem ? 'detail-open' : ''} ${mapMoving ? 'mapmoving' : ''}`}>
+      <div className={`wrap ${mode !== 'browse' ? 'cf' : ''} ${listOpen ? '' : 'collapsed'} ${peek ? 'peeking' : ''} ${openItem ? 'detail-open' : ''} ${mapMoving ? 'mapmoving' : ''}`}>
         <button
           className="collapse-btn list-toggle"
           onClick={() => setListOpen((o) => !o)}
@@ -415,18 +434,22 @@ export default function Home() {
           >
             <span className="sheet-grip" />
           </div>
-          {(course || courseLoading) ? (
-            <CoursePanel
+          {mode === 'start' ? (
+            <StartPanel onSubmit={startCourse} onBrowse={() => setMode('browse')} remaining={Math.max(0, AI_PER_DAY - aiCount())} initial={lastReq && { label: lastReq.label, loc: { center: lastReq.center, label: lastReq.label, spot: lastReq.spot }, time: lastReq.time, mood: lastReq.mood, car: lastReq.car }} />
+          ) : mode === 'course' ? (
+            <CourseView
               course={course}
               loading={courseLoading}
               selected={selectedId}
               onSelectStop={onPick}
-              onClose={onClearCourse}
+              onBack={backToStart}
+              onReroll={reroll}
+              summaryLabel={summaryLabel}
+              car={!!lastReq?.car}
             />
           ) : search.tick === 0 ? (
             <div className="empty">
-              위에서 <b>🧭 AI 코스</b>를 눌러 동네나 역을 고르면<br />하루 데이트·여행 코스를 짜 드려요.<br />
-              <span style={{ color: '#999', fontSize: 13 }}>지금 준비된 동네: 성수 · 용산·남영 · 종로3가·익선 · 천안 불당·신부</span>
+              검색창에 가게·동네를 입력하거나<br />지도를 움직여 <b>이 지역 찾기</b>를 눌러 보세요.
             </div>
           ) : (
             <>
@@ -447,7 +470,7 @@ export default function Home() {
             </>
           )}
         </div>
-        <GeoPanel items={visible} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onBounds={onBoundsChange} onMoving={setMapMoving} onZoom={setMapZoom} navTo={navTo} loading={loading} limit={limit} kind={kind} course={course} courseLoading={courseLoading} />
+        <GeoPanel items={mode === 'browse' ? visible : []} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} kind={kind} course={course} courseLoading={courseLoading} />
         <DetailModal data={openItem} onClose={() => setOpenItem(null)} sheet="half" />
       </div>
       {notice && <div className="detail-toast" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 3000 }}>{notice}</div>}
