@@ -80,30 +80,50 @@ function scorePop(area, rows, signguCd) {
 async function scoreFit(area, key) {
   const sights = area.places.filter((p) => p.kind === 'travel')
   if (!sights.length || !key) return 0
+  // 한 번에 많이 주면(성수 80곳) 빠뜨리거나 대충 매긴다(2026-10-13 실측) → 20개씩 나눠서, 2번 판정해 평균
+  const BATCH = 20, PASSES = 2
+  const sum = new Map() // id → { fit, night, n }
+  for (let pass = 0; pass < PASSES; pass++) {
+    for (let i = 0; i < sights.length; i += BATCH) {
+      for (const g of await fitBatch(area.label, sights.slice(i, i + BATCH), key)) {
+        const c = sum.get(g.id) || { fit: 0, night: 0, n: 0 }
+        c.fit += g.fit; c.night += g.night; c.n++
+        sum.set(g.id, c)
+      }
+    }
+  }
+  let n = 0
+  for (const p of sights) {
+    const c = sum.get(p.id)
+    if (c?.n) { p.fit = Math.round(c.fit / c.n); p.night = Math.round(c.night / c.n); n++ } else { delete p.fit; delete p.night }
+  }
+  return n
+}
+
+async function fitBatch(label, rows, key) {
   const prompt = [
-    `너는 "${area.label}" 동네의 데이트 코스 큐레이터야. 아래 장소마다 "연인 데이트 코스의 중심(메인 볼거리)"으로 얼마나 적합한지 0~5점을 매겨.`,
+    `너는 "${label}" 동네의 데이트 코스 큐레이터야. 아래 장소마다 "연인 데이트 코스의 중심(메인 볼거리)"으로 얼마나 적합한지 fit 0~5점을 매겨.`,
     '기준: 5=이 동네를 대표하는 데이트 명소(누구나 아는 큰 공원·궁궐·대표 거리) / 4=데이트로 좋은 곳(산책로·감성 거리·한옥거리·전시공간) / 3=괜찮음(박물관·갤러리·시장) / 2=곁들이기 좋음(편집숍·플래그십 매장) / 1=애매(일반 매장·특정 목적 시설) / 0=부적합(체육시설·기념비·종교 성지·관공서·음식 골목·주차장·학교·키즈 시설).',
-    '이름과 분류만 보고 상식으로 판단해. 형식: id|이름|분류|주소',
-    sights.map((p) => `${p.id}|${p.name}|${p.cat}|${(p.addr || '').split(' ').slice(1, 4).join(' ')}`).join('\n'),
+    'night 도 0~5점: 해 진 뒤(19시 이후) 저녁 데이트로 갈 만한가 — 5=야경·한강·불 켜진 거리 / 2=매장(밤엔 닫을 수 있음) / 0=밤엔 닫거나(실내 전시·박물관·궁궐 등, 이용시간이 있으면 참고) 갈 이유 없음.',
+    '모든 id 에 빠짐없이 답해. 이름·분류·이용시간만 보고 상식으로 판단해. 형식: id|이름|분류|주소|이용시간',
+    rows.map((p) => `${p.id}|${p.name}|${p.cat}|${(p.addr || '').split(' ').slice(1, 4).join(' ')}|${(p.hours?.use || '').slice(0, 40)}`).join('\n'),
   ].join('\n')
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'STRING' }, fit: { type: 'INTEGER' } }, required: ['id', 'fit'] } } },
+    generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'STRING' }, fit: { type: 'INTEGER' }, night: { type: 'INTEGER' } }, required: ['id', 'fit', 'night'] } } },
   }
+  const clamp = (v) => Math.max(0, Math.min(5, v | 0))
   for (let i = 0; i < 3; i++) {
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (r.ok) {
         const got = JSON.parse((await r.json()).candidates?.[0]?.content?.parts?.[0]?.text || '[]')
-        const fit = new Map(got.map((g) => [g.id, Math.max(0, Math.min(5, g.fit | 0))]))
-        let n = 0
-        for (const p of sights) if (fit.has(p.id)) { p.fit = fit.get(p.id); n++ }
-        return n
+        return got.map((g) => ({ id: g.id, fit: clamp(g.fit), night: clamp(g.night) }))
       }
     } catch (_) {}
     await new Promise((res) => setTimeout(res, 1500 * (i + 1)))
   }
-  return 0
+  return []
 }
 
 // ── 주차장 ──

@@ -55,17 +55,26 @@ const sightTier = (p) => (p.cat === '쇼핑' ? 0 : 1) // 관광지·문화시설
 // 영역 안 후보를 모은다 — 정적 동네 데이터(공공데이터) 우선, 준비 안 된 동네는 DB(seed) 폴백
 // 중심 관광지 점수 — 데이트 적합도(fit 0~5, AI 상식 판정)가 가장 크고, 티맵 연관 인기(pop)·관광공사 소개가 보탠다.
 //  fit 0(체육시설·기념비·음식 골목 등)은 중심 후보에서 제외. 사람이 동네마다 고르지 않게 (scripts/enrichArea.mjs)
-const anchorScore = (p) => (p.fit ?? 2) * 10 + Math.min(p.pop || 0, 30) / 3 + (curated(p) ? 2 : 0)
+//  저녁 코스는 밤 적합도(night) 60% + 낮 적합도(fit) 40% — 실내 전시·궁궐처럼 밤에 닫는 곳이 중심이 되지 않게.
+//  night 만 쓰지 않는 이유: 항목이 많은 동네(성수 80곳)에선 모델이 매장까지 night 5를 주는 등 과대평가 → fit 으로 눌러 준다
+const anchorScore = (p, evening = false) => (evening ? (p.night ?? 2) * 6 + (p.fit ?? 2) * 4 : (p.fit ?? 2) * 10) + Math.min(p.pop || 0, 30) / 3 + (curated(p) ? 2 : 0)
+const anchorOk = (p, evening) => p.fit !== 0 && !(evening && p.night === 0)
+// 이용시간에 적힌 마감이 19시 전이면 저녁엔 제외("11:00~18:00" 등). 시간 정보가 없으면 판단하지 않는다
+const closesEarly = (p) => {
+  const ends = [...String(p.hours?.use || '').matchAll(/~\s*(\d{1,2}):\d{2}/g)].map((m) => +m[1])
+  const last = ends.length ? Math.max(...ends) : null
+  return last !== null && last >= 6 && last < 19
+}
 const ANCHOR_RADIUS = 1000 // 중심 관광지에서 이 거리(m) 안의 맛집·카페만
 
-async function gatherCandidates(bbox) {
-  const local = placesIn(bbox).map((p) => ({ ...p, region: p.region || p.addr || '' }))
+async function gatherCandidates(bbox, evening = false) {
+  const local = placesIn(bbox).map((p) => ({ ...p, region: p.region || p.addr || '' })).filter((p) => !(evening && closesEarly(p)))
   if (local.length) {
-    // ① 중심 관광지: 점수 상위 3곳 중 하나(다시 짜면 다른 중심) → ② 그 1km 안에서 맛집·카페·다른 구경거리
-    const sights = local.filter((p) => p.kind === 'travel' && p.fit !== 0).sort((a, b) => anchorScore(b) - anchorScore(a))
+    // ① 중심 관광지: 최고점대에서 무작위(다시 짜면 다른 중심) → ② 그 1km 안에서 맛집·카페·다른 구경거리
+    const sights = local.filter((p) => p.kind === 'travel' && anchorOk(p, evening)).sort((a, b) => anchorScore(b, evening) - anchorScore(a, evening))
     // 1등 근처 점수대(-5점 이내)에서 고르게 무작위 — 동점이 많을 때 앞쪽만 뽑히지 않게
-    const best = sights.length ? anchorScore(sights[0]) : 0
-    const anchor = sights.length ? shuffle(sights.filter((p) => anchorScore(p) >= best - 5))[0] : null
+    const best = sights.length ? anchorScore(sights[0], evening) : 0
+    const anchor = sights.length ? shuffle(sights.filter((p) => anchorScore(p, evening) >= best - 5))[0] : null
     const near = anchor ? local.filter((p) => p === anchor || haversine(anchor, p) <= ANCHOR_RADIUS) : local
     const food = near.filter((p) => p.kind === 'food')
     // 같은 tier 안에선 티맵 인기(pop) 있는 곳이 먼저 오도록 tier 에 소수점 가산
@@ -303,7 +312,7 @@ export default async function handler(req, res) {
     if (!bbox && !favs.length) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
 
     // 지역 seed 후보
-    let cand = bbox ? await gatherCandidates(bbox) : { food: [], travel: [], stay: [] }
+    let cand = bbox ? await gatherCandidates(bbox, isEvening(theme)) : { food: [], travel: [], stay: [] }
 
     // 즐겨찾기 합치기: bbox 있으면 그 주변(±0.05°≈5km)만, 없으면 전부. 중복은 fav 표시만.
     let cluster = false
