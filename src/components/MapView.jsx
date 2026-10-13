@@ -67,11 +67,17 @@ function FitCourse({ stops }) {
 const KR_CENTER = [36.2, 127.8] // 대한민국 중앙 부근
 const KR_ZOOM = 7
 
-// items 가 바뀌면 마커들이 보이도록 지도 영역을 맞춘다. (initialCenter 를 준 경우 생략)
+// 검색 결과가 '바뀌었을 때만' 마커들이 보이도록 지도 영역을 맞춘다. (initialCenter 를 준 경우 생략)
+//  ⚠️ points 는 렌더마다 새 배열이라 의존성으로만 걸면 지도를 움직일 때마다(리렌더) 결과 쪽으로 되돌아간다
+//     (2026-10-13 지구본 제거 후 드러난 버그: "위치 포커스되면 이동이 안 됨") → 좌표 목록 키로 비교. FitCourse 와 같은 방식.
 function FitBounds({ points, skip }) {
   const map = useMap()
+  const ref = useRef(null)
   useEffect(() => {
     if (skip || !points.length) return
+    const key = points.map((p) => p.join(',')).join(';')
+    if (key === ref.current) return
+    ref.current = key
     if (points.length === 1) map.setView(points[0], 14)
     else map.fitBounds(points, { padding: [40, 40], maxZoom: 15 })
   }, [points, skip, map])
