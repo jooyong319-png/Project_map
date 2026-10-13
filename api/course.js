@@ -209,10 +209,10 @@ async function parkingFor(at, kkey) {
     try {
       const r = await fetch(`https://dapi.kakao.com/v2/local/search/category.json?category_group_code=PK6&x=${at.lng}&y=${at.lat}&radius=500&sort=distance&size=8`, { headers: { Authorization: `KakaoAK ${kkey}` } })
       if (r.ok) {
-        const pubNames = new Set(pub.map((p) => p.name.replace(/s+/g, '')))
+        const pubNames = new Set(pub.map((p) => p.name.replace(/\s+/g, '')))
         priv = ((await r.json()).documents || [])
           // 공영은 위에서(요금 있음), "○○ 전용주차장"은 손님·입주자만이라 제외
-          .filter((d) => !/공영|전용/.test(d.place_name) && !pubNames.has(d.place_name.replace(/s+/g, '')))
+          .filter((d) => !/공영|전용/.test(d.place_name) && !pubNames.has(d.place_name.replace(/\s+/g, '')))
           .slice(0, 3)
           .map((d) => ({ name: d.place_name, type: '민영', dist: Number(d.distance) || null, url: d.place_url, lat: Number(d.y), lng: Number(d.x) }))
       }
