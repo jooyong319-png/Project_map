@@ -198,6 +198,12 @@ export default function Home() {
     setCourse(null)
     try {
       const c = await getCourse(bbox, theme, from, car, time)
+      if (c?.limited) {
+        setCourse(null)
+        setMode('start')
+        say('요청이 너무 많아요. 잠시 후 다시 시도해 주세요 🙏')
+        return null
+      }
       if (!c || !c.stops?.length) {
         setCourse(null)
         setMode('start')

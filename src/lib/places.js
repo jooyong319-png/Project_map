@@ -13,6 +13,7 @@ export async function getCourse(bbox, theme = '', from = null, car = false, time
     const t = theme ? `&theme=${encodeURIComponent(theme)}` : ''
     const f = from ? `&from=${encodeURIComponent(from.label)}&fx=${from.lng}&fy=${from.lat}` : ''
     const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}${car ? '&car=1' : ''}&time=${time}`)
+    if (res.status === 429) return { limited: true } // 서버 호출 제한
     if (res.ok) return (await res.json()).course || null
   } catch (_) {}
   return null

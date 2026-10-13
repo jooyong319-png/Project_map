@@ -276,7 +276,34 @@ function parseBbox(v) {
   return a.length === 4 && a.every(Number.isFinite) ? a : null
 }
 
+// ===== 호출 제한 (Gemini 비용 보호) =====
+//  화면의 '기기당 하루 5회'는 브라우저 저장소라 API 를 직접 부르면 못 막는다 → 서버에서도 센다.
+//  ⚠️ DB 가 없어 서버 메모리 기준: Vercel 은 인스턴스가 여러 개·재시작되므로 '대부분의 남용'만 막는다.
+//     확실한 상한은 Gemini API 키의 사용량·결제 한도(콘솔)로 건다 (wiki/브리프.md 🛑 항목).
+const HOUR = 60 * 60 * 1000
+const PER_IP_HOUR = 10   // IP 하나가 1시간에
+const ALL_HOUR = 300     // 이 인스턴스 전체가 1시간에
+const hits = new Map()   // ip → [시각…]
+let allHits = []
+function ipOf(req) {
+  const h = req.headers || {}
+  return String(h['x-forwarded-for'] || h['x-real-ip'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim()
+}
+function overLimit(ip) {
+  const now = Date.now()
+  allHits = allHits.filter((t) => now - t < HOUR)
+  const mine = (hits.get(ip) || []).filter((t) => now - t < HOUR)
+  if (mine.length >= PER_IP_HOUR || allHits.length >= ALL_HOUR) { hits.set(ip, mine); return true }
+  mine.push(now); allHits.push(now); hits.set(ip, mine)
+  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t) => now - t < HOUR)) hits.delete(k) // 메모리 정리
+  return false
+}
+
 export default async function handler(req, res) {
+  if (overLimit(ipOf(req))) {
+    res.status(429).json({ course: null, error: 'rate', reason: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.' })
+    return
+  }
   const theme = (req.query?.theme || '').toString().slice(0, 80)
   // 출발점(역·장소) — 런처에서 역을 고르면 옴
   const fx = Number(req.query?.fx), fy = Number(req.query?.fy)
