@@ -10,7 +10,7 @@ const POPULAR = [
   { label: '부산 해운대', center: [129.160, 35.163] },
   { label: '경주', center: [129.225, 35.842] },
 ]
-const THEME_CHIPS = ['데이트', '가족 나들이', '혼자 힐링', '맛집 위주', '감성 카페', '액티비티']
+const THEME_CHIPS = ['데이트', '저녁 데이트', '가족 나들이', '혼자 힐링', '맛집 위주', '감성 카페', '액티비티']
 
 export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCurrent, favCount = 0, onClose }) {
   const [q, setQ] = useState('')

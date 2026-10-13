@@ -42,10 +42,14 @@ const pick = (list, tier, n) => {
   for (const p of list) { const t = tier(p); if (t < 0) continue; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(p) }
   return [...groups.keys()].sort((a, b) => b - a).flatMap((t) => shuffle(groups.get(t))).slice(0, n)
 }
-const curated = (p) => p.tags?.includes('관광공사 소개') // 관광공사가 소개한 곳 = 이용시간·쉬는 날 정보가 있다
-// 식사: 관광공사 소개 > 노포·백년가게 > 그 외(후보에서 제외)
-const mealTier = (p) => (curated(p) ? 2 : (p.tags?.includes('백년가게') || p.tags?.includes('노포')) ? 1 : -1)
-const cafeTier = (p) => (curated(p) ? 1 : 0)
+const has = (p, t) => p.tags?.includes(t)
+const curated = (p) => has(p, '관광공사 소개') // 관광공사가 소개한 곳 = 이용시간·쉬는 날 정보가 있다
+const titled = (p) => ['백년가게', '모범음식점', '안심식당', '착한가격', '노포'].some((t) => has(p, t)) // 공공 지정·인증·영업 연수
+// 식사: AI 픽(모델이 아는 데이트 명소, 실재 확인) > 관광공사 소개 > 공공 타이틀 > 그 외(후보 제외)
+const mealTier = (p) => (has(p, 'AI 픽') ? 3 : curated(p) ? 2 : titled(p) ? 1 : -1)
+const cafeTier = (p) => (has(p, 'AI 픽') ? 2 : curated(p) ? 1 : 0)
+// 저녁 코스 여부 — 테마에 저녁·밤·야경·퇴근
+export const isEvening = (theme = '') => /저녁|밤|야경|퇴근|야간|나이트/.test(theme)
 const sightTier = (p) => (p.cat === '쇼핑' ? 0 : 1) // 관광지·문화시설 > 쇼핑(플래그십·편집숍)
 
 // 영역 안 후보를 모은다 — 정적 동네 데이터(공공데이터) 우선, 준비 안 된 동네는 DB(seed) 폴백
@@ -98,12 +102,13 @@ function heuristicCourse(cand) {
 
 // Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, cluster=흩어진 후보를 가까운 것끼리.
 async function geminiCourse(cand, key, theme, cluster = false) {
+  const evening = isEvening(theme)
   const byId = new Map()
   const flat = []
   for (const k of ['stay', 'food', 'travel']) {
     for (const p of cand[k]) {
       byId.set(p.id, p)
-      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, menu: p.menu || undefined, rest: p.hours?.rest || undefined, fav: !!p.fav })
+      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, menu: p.menu || p.price || undefined, use: p.hours?.use || undefined, rest: p.hours?.rest || undefined, note: p.pick || undefined, fav: !!p.fav })
     }
   }
   const hasFav = flat.some((f) => f.fav)
@@ -115,7 +120,11 @@ async function geminiCourse(cand, key, theme, cluster = false) {
     cluster ? '- 후보가 여러 지역에 흩어져 있을 수 있어. region 을 보고 "하루에 다닐 수 있는 가까운 곳들"로만 골라(멀리 떨어진 곳은 제외).' : '',
     hasFav ? '- fav:true 는 사용자가 즐겨찾기한 곳이야. 동선에 맞으면 적극적으로 우선 포함해줘.' : '',
     '- 숙소(kind=stay)가 있으면 1곳을 베이스캠프로 맨 처음에 넣어. 없으면 생략.',
-    '- 식사(kind=food, cat≠카페) 2곳(점심·저녁), 카페(cat=카페) 1곳, 구경(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→카페→구경→저녁 느낌). 후보가 모자라면 있는 만큼.',
+    evening
+      ? '- 저녁(18시 이후 시작) 코스야. 저녁 식사 1곳 → 걷기 좋은 곳·야경 1곳(있으면) → 와인바·바·이자카야·디저트 카페 중 1곳, 총 3~4곳. use(이용시간)를 보고 저녁에 문 닫는 곳(예: ~19:00 마감, 브런치·낮 카페)은 빼.'
+      : '- 식사(kind=food, cat≠카페) 2곳(점심·저녁), 카페(cat=카페) 1곳, 구경(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→카페→구경→저녁 느낌). 후보가 모자라면 있는 만큼.',
+    '- 서로 걸어서 15분 안쪽으로 이어지게 가까운 곳끼리 골라 (region·주소 참고).',
+    '- AI 픽 태그의 note 는 그 가게에 대한 참고 설명이야. 공공 타이틀(모범음식점·안심식당·착한가격·백년가게·노포)은 reason 에 자연스럽게 언급해도 돼.',
     '- 관광공사 소개 태그가 있는 곳은 이용시간이 확인된 곳이라 우선해. rest(쉬는 날)가 있으면 reason 끝에 "(○요일 휴무)"처럼 짧게 덧붙여.',
     '- since(영업 시작 연도, 오래될수록 검증된 곳)와 cat·tags 를 특징 근거로 참고해. 없는 정보(평점·후기 수 등)를 지어내지 마.',
     '- 각 stop 의 reason 은 한국어 한 문장, 친근하고 구체적으로.',

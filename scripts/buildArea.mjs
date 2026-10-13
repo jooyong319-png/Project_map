@@ -31,6 +31,32 @@ const AREAS = {
     bbox: [127.035, 37.535, 127.072, 37.553], tour: { mapX: 127.0535, mapY: 37.5440, radius: 2000 },
     keywords: ['성수', '서울숲', '뚝섬'],
   },
+  // 용산·남영 — 삼각지·용리단길(한강로), 남영동·갈월동, 신용산
+  yongsan: {
+    label: '용산·남영', gu: '용산구',
+    dongs: ['남영동', '갈월동', '한강로1가', '한강로2가', '한강로3가', '용산동2가', '용산동3가', '용산동5가', '원효로1가', '문배동'],
+    bbox: [126.960, 37.522, 126.988, 37.550], tour: { mapX: 126.9735, mapY: 37.5365, radius: 1800 },
+    keywords: ['용산', '남영', '삼각지', '용리단길', '신용산'],
+  },
+  // 종로3가 — 익선동·서순라길·인사동·낙원상가 일대
+  jongno3: {
+    label: '종로3가·익선', gu: '종로구',
+    dongs: ['익선동', '돈의동', '묘동', '봉익동', '와룡동', '권농동', '낙원동', '인사동', '관수동', '장사동', '종로2가', '종로3가', '운니동', '훈정동'],
+    bbox: [126.983, 37.567, 127.000, 37.581], tour: { mapX: 126.9915, mapY: 37.5735, radius: 1200 },
+    keywords: ['익선동', '종로3가', '인사동', '서순라길', '낙원', '종묘'],
+  },
+  // 천안 불당동 — 불당 카페거리·먹자골목 (서북구)
+  cheonan_buldang: {
+    label: '천안 불당', gu: '서북구', dongs: ['불당동'],
+    bbox: [127.095, 36.800, 127.125, 36.825], tour: { mapX: 127.1095, mapY: 36.8125, radius: 1800 },
+    keywords: ['불당동', '불당'],
+  },
+  // 천안 신부동 — 종합터미널·신세계백화점 주변 번화가 (동남구)
+  cheonan_sinbu: {
+    label: '천안 신부', gu: '동남구', dongs: ['신부동'],
+    bbox: [127.143, 36.810, 127.165, 36.828], tour: { mapX: 127.1550, mapY: 36.8190, radius: 1500 },
+    keywords: ['신부동', '천안종합터미널', '천안 신세계'],
+  },
 }
 
 // EPSG:5174 (Korea Modified Central Belt, Bessel) → WGS84  (buildPlaces.mjs 와 동일)
@@ -94,14 +120,20 @@ async function readLicense(file, area, defaultCat) {
   return { rows: out, total }
 }
 
-// ── 백년가게 (업체명·주소 → 인허가 행과 매칭) ──
-async function readBaeknyeon() {
-  const f = fs.readdirSync(RAW).find((n) => n.startsWith('백년가게'))
+// ── 공공 지정·인증 (업체명·주소 → 인허가 행과 매칭해 태그로) ──
+//  file: data_raw/ 안에서 이 이름으로 시작하는 CSV(EUC-KR). 전부 data.go.kr "이용허락범위 제한 없음".
+const DESIGNATIONS = [
+  { tag: '백년가게', file: '백년가게', name: '업체명', addr: '업체주소' },        // 중기부·소진공 (15132695)
+  { tag: '착한가격', file: '착한가격업소', name: '업소명', addr: '주소',            // 행정안전부 (3045247)
+    extra: (r) => ({ price: [1, 2].map((i) => (r[`메뉴${i}`] && r[`가격${i}`] ? `${r[`메뉴${i}`]} ${Number(r[`가격${i}`]).toLocaleString()}원` : '')).filter(Boolean).join(', ') }) },
+]
+async function readDesignation(d) {
+  const f = fs.readdirSync(RAW).find((n) => n.startsWith(d.file) && n.endsWith('.csv'))
   if (!f) return []
   const txt = new TextDecoder('euc-kr').decode(fs.readFileSync(path.join(RAW, f)))
   const rows = []
-  for await (const r of parse(txt, { columns: true, skip_empty_lines: true, relax_column_count: true, trim: true })) {
-    rows.push({ name: r['업체명'] || '', addr: r['업체주소'] || '' })
+  for await (const r of parse(txt, { columns: true, skip_empty_lines: true, relax_column_count: true, relax_quotes: true, trim: true })) {
+    rows.push({ name: r[d.name] || '', addr: r[d.addr] || '', ...(d.extra ? d.extra(r) : {}) })
   }
   return rows
 }
@@ -158,10 +190,18 @@ async function readTour(area, key) {
       if (!body || page * 100 >= (body.totalCount || 0)) break
     }
   }
-  // 이용시간·쉬는 날 (항목당 1회 호출)
+  // 이용시간·쉬는 날 (항목당 1회 호출) — 개발계정은 하루 1,000건 한도라 받은 건 캐시하고 재사용.
+  //  (2026-10-13 재빌드 반복으로 한도 초과 → 영업시간이 통째로 비는 일이 있었다. 실패한 응답은 캐시하지 않는다)
+  const cache = readTourCache()
+  let fresh = 0, failed = 0
   const rows = []
   for (const { type, t, it, lng, lat } of out) {
-    const intro = (await tourGet('detailIntro2', { contentId: it.contentid, contentTypeId: type }, key))?.items?.item?.[0] || {}
+    let intro = cache[it.contentid]
+    if (!intro) {
+      const body = await tourGet('detailIntro2', { contentId: it.contentid, contentTypeId: type }, key)
+      intro = body?.items?.item?.[0]
+      if (intro) { cache[it.contentid] = intro; fresh++ } else { intro = {}; failed++ }
+    }
     const cat = t.cat || catOf(clean(it.title), '', clean(intro.firstmenu) + ' ' + clean(intro.treatmenu))
     rows.push({
       id: `t_${it.contentid}`, name: clean(it.title), kind: t.kind, cat,
@@ -174,8 +214,15 @@ async function readTour(area, key) {
       tags: ['관광공사 소개'], src: 'tourapi',
     })
   }
+  writeTourCache(cache)
+  console.log(`TourAPI 이용시간: 새로 받음 ${fresh} · 캐시 ${rows.length - fresh - failed} · 실패 ${failed}${failed ? ' ⚠️ 하루 한도 초과일 수 있음 — 내일 다시 빌드하면 채워짐' : ''}`)
   return rows
 }
+
+// detailIntro2 캐시 (data_raw/ = gitignore). 관광공사 데이터는 "이용허락범위 제한 없음"이라 보관 가능.
+const TOUR_CACHE = path.join(RAW, 'tourapi_intro_cache.json')
+function readTourCache() { try { return JSON.parse(fs.readFileSync(TOUR_CACHE, 'utf8')) } catch (_) { return {} } }
+function writeTourCache(c) { fs.writeFileSync(TOUR_CACHE, JSON.stringify(c), 'utf8') }
 
 async function main() {
   const slug = process.argv[2] || 'seongsu'
@@ -192,15 +239,17 @@ async function main() {
   // 노포: 같은 자리에서 20년 이상
   for (const p of places) if (yearsSince(p.licensed) >= 20) p.tags.push('노포')
 
-  // 백년가게 매칭 (정규화 이름 + 도로명 번지)
-  const bn = await readBaeknyeon()
+  // 지정·인증 매칭 (정규화 이름 + 도로명 번지)
   const byKey = new Map(places.map((p) => [keyOf(p.name, p.addr), p]))
-  let bnHit = 0
-  for (const b of bn) {
-    const p = byKey.get(keyOf(b.name, b.addr))
-    if (p) { p.tags.push('백년가게'); bnHit++ }
+  for (const d of DESIGNATIONS) {
+    const rows = await readDesignation(d)
+    let hit = 0
+    for (const b of rows) {
+      const p = byKey.get(keyOf(b.name, b.addr))
+      if (p && !p.tags.includes(d.tag)) { p.tags.push(d.tag); if (b.price) p.price = b.price; hit++ }
+    }
+    console.log(`${d.tag}: 전국 ${rows.length}곳 중 이 동네 매칭 ${hit}곳`)
   }
-  console.log(`백년가게: 전국 ${bn.length}곳 중 이 동네 매칭 ${bnHit}곳`)
 
   // TourAPI — 관광공사 소개 음식점은 인허가 행과 합친다(이름 같고 100m 이내), 나머지는 새 행
   let tour = []
