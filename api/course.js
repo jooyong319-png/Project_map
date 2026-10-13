@@ -1,18 +1,14 @@
 // AI 코스 짜기 — 현재 지도 영역의 '저장된 곳'(숙소·맛집·관광지)에서 하루 동선을 만든다.
-//  · 핵심: AI 가 좌표를 지어내지 않게, 우리 seed DB 에 실재하는 곳만 후보로 주고
+//  · 핵심: AI 가 좌표를 지어내지 않게, 동네 데이터(공공데이터, lib/areas.js)에 실재하는 곳만 후보로 주고
 //    Gemini 는 그중에서 '고르고 · 순서 잡고 · 이유 쓰기'만 한다(환각 방지).
 //  · GEMINI_API_KEY 가 없으면 휴리스틱(영업 연수·태그 + 최근접 순서)으로 폴백 — 키 없이도 동작.
 // 호출:  GET /api/course?bbox=서,남,동,북
 // 환경변수: GEMINI_API_KEY (없으면 폴백), GEMINI_MODEL(선택, 기본 gemini-2.5-flash)
 
-import { seedAll } from '../lib/store.js'
 import { placesIn, parkingNear } from '../lib/areas.js'
-import { cachedEnrich, googleKey } from '../lib/gcache.js'
-import { enrichWithGoogle } from './kakao.js'
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
-const inBox = (p, w, s, e, n) => p.lng >= w && p.lng <= e && p.lat >= s && p.lat <= n
 const d2 = (a, b) => { const dx = a.lng - b.lng, dy = a.lat - b.lat; return dx * dx + dy * dy }
 // 인기 신호 = 공공데이터만 (네이버 블로그 수는 약관상 코스 후보·AI 입력에 못 씀)
 //  · 영업 연수(인허가일 기준, 오래될수록 검증된 곳) + 지정·특징 태그 수
@@ -52,7 +48,7 @@ const cafeTier = (p) => (has(p, 'AI 픽') ? 2 : curated(p) ? 1 : 0)
 export const isEvening = (theme = '') => /저녁|밤|야경|퇴근|야간|나이트/.test(theme)
 const sightTier = (p) => (p.cat === '쇼핑' ? 0 : 1) // 관광지·문화시설 > 쇼핑(플래그십·편집숍)
 
-// 영역 안 후보를 모은다 — 정적 동네 데이터(공공데이터) 우선, 준비 안 된 동네는 DB(seed) 폴백
+// 영역 안 후보를 모은다 — 정적 동네 데이터(공공데이터). 준비 안 된 동네는 빈 후보
 // 중심 관광지 점수 — 데이트 적합도(fit 0~5, AI 상식 판정)가 가장 크고, 티맵 연관 인기(pop)·관광공사 소개가 보탠다.
 //  fit 0(체육시설·기념비·음식 골목 등)은 중심 후보에서 제외. 사람이 동네마다 고르지 않게 (scripts/enrichArea.mjs)
 //  저녁 코스는 밤 적합도(night) 60% + 낮 적합도(fit) 40% — 실내 전시·궁궐처럼 밤에 닫는 곳이 중심이 되지 않게.
@@ -86,24 +82,7 @@ async function gatherCandidates(bbox, evening = false) {
       stay: [],
     }
   }
-  const [w, s, e, n] = bbox
-  const out = {}
-  for (const k of ['food', 'travel', 'stay']) {
-    const all = await seedAll(k)
-    out[k] = topBy(all.filter((p) => inBox(p, w, s, e, n)), 12)
-  }
-  return out
-}
-
-// POST 바디 읽기 (Vercel=req.body 파싱됨 / 로컬 vite=스트림 직접 읽기)
-async function readBody(req) {
-  if (req.body) return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body
-  return await new Promise((resolve) => {
-    let data = ''
-    req.on('data', (c) => { data += c })
-    req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch { resolve({}) } })
-    req.on('error', () => resolve({}))
-  })
+  return { food: [], travel: [], stay: [] } // 데이터가 준비되지 않은 동네
 }
 
 // 키 없을 때 폴백: 공공데이터 점수(영업 연수·태그) 상위로 뽑고 최근접 순서로 묶는다
@@ -123,8 +102,8 @@ function heuristicCourse(cand) {
   return { title: '하루 추천 코스', summary: `이 지역 인기 ${stops.length}곳을 가까운 순서로 묶었어요.`, stops, by: 'auto' }
 }
 
-// Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, cluster=흩어진 후보를 가까운 것끼리.
-async function geminiCourse(cand, key, theme, cluster = false, from = null) {
+// Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, from=출발점(역)
+async function geminiCourse(cand, key, theme, from = null) {
   const anchor = cand.anchor
   const evening = isEvening(theme)
   const byId = new Map()
@@ -132,17 +111,14 @@ async function geminiCourse(cand, key, theme, cluster = false, from = null) {
   for (const k of ['stay', 'food', 'travel']) {
     for (const p of cand[k]) {
       byId.set(p.id, p)
-      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, menu: p.menu || p.price || undefined, use: p.hours?.use || undefined, rest: p.hours?.rest || undefined, note: p.pick || undefined, fav: !!p.fav })
+      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, menu: p.menu || p.price || undefined, use: p.hours?.use || undefined, rest: p.hours?.rest || undefined, note: p.pick || undefined })
     }
   }
-  const hasFav = flat.some((f) => f.fav)
   const th = (theme || '').trim()
   const prompt = [
     '너는 한국 여행 동선을 짜는 큐레이터야. 아래 "후보" 목록(JSON)에서만 골라서 하루 코스를 만들어.',
     '규칙:',
     '- 후보에 있는 id 만 사용 (목록에 없는 곳은 절대 만들지 마).',
-    cluster ? '- 후보가 여러 지역에 흩어져 있을 수 있어. region 을 보고 "하루에 다닐 수 있는 가까운 곳들"로만 골라(멀리 떨어진 곳은 제외).' : '',
-    hasFav ? '- fav:true 는 사용자가 즐겨찾기한 곳이야. 동선에 맞으면 적극적으로 우선 포함해줘.' : '',
     '- 숙소(kind=stay)가 있으면 1곳을 베이스캠프로 맨 처음에 넣어. 없으면 생략.',
     evening
       ? '- 저녁(18시 이후 시작) 코스야. 저녁 식사 1곳 → 걷기 좋은 곳·야경 1곳(있으면) → 와인바·바·이자카야·디저트 카페 중 1곳, 총 3~4곳. use(이용시간)를 보고 저녁에 문 닫는 곳(예: ~19:00 마감, 브런치·낮 카페)은 빼.'
@@ -269,24 +245,6 @@ async function buildLegs(stops, kkey, okey) {
   }))
 }
 
-// ===== 숙박 어필리에이트 (목표 2: 코스 근처 숙소 예약 → 수수료) =====
-// 코스 중심 좌표로 OTA 예약 검색 딥링크를 만든다. 제휴사 무관: env STAY_AFF_LINK 에
-// 제휴사가 준 링크 형식을 넣으면 {lat}{lng}{area}{checkin}{checkout} 를 채워준다.
-//  예) 부킹: https://www.booking.com/searchresults.html?aid=YOUR_AID&latitude={lat}&longitude={lng}
-//  STAY_AFF_LINK 미설정 시 숙박 블록 생략(제휴 승인 전엔 자동 비활성).
-function buildLodging(stops, area) {
-  const tmpl = process.env.STAY_AFF_LINK
-  const pts = (stops || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
-  if (!tmpl || !pts.length) return null
-  const lat = (pts.reduce((s, p) => s + p.lat, 0) / pts.length).toFixed(5)
-  const lng = (pts.reduce((s, p) => s + p.lng, 0) / pts.length).toFixed(5)
-  const url = tmpl
-    .replace(/\{lat\}/g, lat).replace(/\{lng\}/g, lng)
-    .replace(/\{area\}/g, encodeURIComponent(area || ''))
-    .replace(/\{checkin\}/g, '').replace(/\{checkout\}/g, '')
-  return { lat: +lat, lng: +lng, url, label: '이 코스 근처 숙소 예약하기' }
-}
-
 // 좌표 배열 파싱 (문자열 "w,s,e,n" → [.. ] 또는 null)
 function parseBbox(v) {
   const a = (v || '').toString().split(',').map(Number)
@@ -294,45 +252,15 @@ function parseBbox(v) {
 }
 
 export default async function handler(req, res) {
-  let theme = (req.query?.theme || '').toString().slice(0, 80)
+  const theme = (req.query?.theme || '').toString().slice(0, 80)
   // 출발점(역·장소) — 런처에서 역을 고르면 옴
   const fx = Number(req.query?.fx), fy = Number(req.query?.fy)
   const car = req.query?.car === '1'
   const from = req.query?.from && Number.isFinite(fx) && Number.isFinite(fy) ? { label: req.query.from.toString().slice(0, 40), lng: fx, lat: fy } : null
-  let bbox = parseBbox(req.query?.bbox)
-  let favs = []
+  const bbox = parseBbox(req.query?.bbox)
   try {
-    // POST = 즐겨찾기 참고. body 에 bbox(선택)+candidates(저장목록)
-    if (req.method === 'POST') {
-      const b = await readBody(req)
-      theme = (b.theme || theme || '').toString().slice(0, 80)
-      bbox = bbox || parseBbox(b.bbox)
-      favs = (Array.isArray(b.candidates) ? b.candidates : []).filter((p) => p?.lat != null && p?.lng != null).slice(0, 60)
-    }
-    if (!bbox && !favs.length) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
-
-    // 지역 seed 후보
-    let cand = bbox ? await gatherCandidates(bbox, isEvening(theme)) : { food: [], travel: [], stay: [] }
-
-    // 즐겨찾기 합치기: bbox 있으면 그 주변(±0.05°≈5km)만, 없으면 전부. 중복은 fav 표시만.
-    let cluster = false
-    if (favs.length) {
-      const idx = new Map()
-      for (const k of ['food', 'travel', 'stay']) for (const it of cand[k]) idx.set(it.id, it)
-      const pad = 0.05
-      const within = bbox ? (p) => p.lng >= bbox[0] - pad && p.lng <= bbox[2] + pad && p.lat >= bbox[1] - pad && p.lat <= bbox[3] + pad : () => true
-      let added = 0
-      for (const p of favs) {
-        if (!within(p)) continue
-        const ex = idx.get(p.id)
-        if (ex) { ex.fav = true; continue }
-        const k = ['food', 'travel', 'stay'].includes(p.kind) ? p.kind : 'food'
-        const it = { ...p, fav: true }
-        cand[k].push(it); idx.set(p.id, it); added++
-      }
-      cluster = true // 즐겨찾기 기반 → 흩어진 후보를 가까운 것끼리 묶게(근처 seed 포함)
-    }
-
+    if (!bbox) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
+    const cand = await gatherCandidates(bbox, isEvening(theme))
     const total = cand.food.length + cand.travel.length + cand.stay.length
     if (total < 2) { res.status(200).json({ course: null, reason: 'empty' }); return }
     const key = process.env.GEMINI_API_KEY
@@ -340,7 +268,7 @@ export default async function handler(req, res) {
     if (key) {
       // 일시적 실패(혼잡/타임아웃) 대비 최대 3회 재시도 후에만 휴리스틱 폴백
       for (let i = 0; i < 3 && !course; i++) {
-        try { course = await geminiCourse(cand, key, theme, cluster, from) }
+        try { course = await geminiCourse(cand, key, theme, from) }
         catch (_) { if (i < 2) await new Promise((r) => setTimeout(r, 400 * (i + 1))) }
       }
       if (!course) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // 3회 다 실패 → 자동 구성
@@ -348,24 +276,13 @@ export default async function handler(req, res) {
       course = heuristicCourse(cand)
     }
     if (!course) { res.status(200).json({ course: null, reason: 'empty' }); return }
-    // 코스 항목에 구글 평점·사진 보강(캐시 우선, 14일 지난 것만 재호출) + 상세연결용 source/gid
-    if (course.stops?.length) {
-      course.stops = course.stops.map((s) => ({ source: 'kakao', ...s }))
-      const gkey = googleKey()
-      if (gkey) course.stops = await cachedEnrich(course.stops, course.stops.length, (it) => enrichWithGoogle(it, gkey))
-    }
     // 중심 관광지 · 주차장(🚗 차로 가요)
     if (cand.anchor) course.anchor = { id: cand.anchor.id, name: cand.anchor.name }
     if (car) course.parking = await parkingFor(cand.anchor || course.stops?.[0], process.env.KAKAO_REST_KEY)
     // 출발점 → 첫 장소 도보
     if (from && course.stops?.length) course.start = { label: from.label, walk: walkLeg(from, course.stops[0]) }
     // 구간별 이동시간(차/대중교통/도보)
-    if (course.stops?.length > 1) {
-      course.legs = await buildLegs(course.stops, process.env.KAKAO_REST_KEY, process.env.ODSAY_API_KEY)
-    }
-    // 숙박 어필리에이트 — 코스 근처 숙소 예약 링크(제휴 승인+STAY_AFF_LINK 설정 시 활성)
-    const lodging = buildLodging(course.stops, course.title)
-    if (lodging) course.lodging = lodging
+    if (course.stops?.length > 1) course.legs = await buildLegs(course.stops, process.env.KAKAO_REST_KEY, process.env.ODSAY_API_KEY)
     res.status(200).json({ course })
   } catch (e) {
     res.status(200).json({ course: null, error: String(e) })

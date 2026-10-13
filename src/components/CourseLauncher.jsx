@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 
-// AI 코스 런처 — 위치 모드 3가지 중 하나 + 테마(선택) 정하고 '코스 짜기'.
-//   ① 지금 보고 있는 지역  ② ⭐ 즐겨찾기로  ③ 기본(동네 검색/인기칩)
+// AI 코스 런처 — 위치(지금 보는 지역 / 동네·역 검색·추천칩) + 테마(선택) + 🚗 정하고 '코스 짜기'.
 // 데이터가 준비된 동네(src/data/places)만 — 역은 spot:true → 역 주변 걸어갈 범위로 좁히고 역에서 출발
 const POPULAR = [
   { label: '성수역', center: [127.0557, 37.5446], spot: true },
@@ -14,11 +13,11 @@ const POPULAR = [
 ]
 const THEME_CHIPS = ['데이트', '저녁 데이트', '가족 나들이', '혼자 힐링', '맛집 위주', '감성 카페', '액티비티']
 
-export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCurrent, favCount = 0, onClose }) {
+export default function CourseLauncher({ onLaunch, onUseCurrent, hasCurrent, onClose }) {
   const [q, setQ] = useState('')
   const [sugs, setSugs] = useState([])
   const pickedRef = useRef(false) // 선택 직후엔 재검색 안 함(고른 값 유지)
-  // loc: null | {type:'current'} | {type:'fav'} | {type:'region', center, label}
+  // loc: null | {type:'current'} | {type:'region', center, label, spot}
   const [loc, setLoc] = useState(null)
   const [theme, setTheme] = useState('')
   const [car, setCar] = useState(false) // 🚗 차로 가요 → 주차장(공영·민영) 함께
@@ -42,12 +41,9 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
     if (!loc) return
     const th = theme.trim()
     if (loc.type === 'current') onUseCurrent(th, car)
-    else if (loc.type === 'fav') onUseFav(th, car)
     else onLaunch(loc.center, loc.label, th, loc.spot, car)
   }
-  const btnLabel = loc?.type === 'fav' ? '즐겨찾기로 코스 짜기'
-    : loc ? `'${loc.label}' 코스 짜기`
-    : '위치를 골라주세요'
+  const btnLabel = loc ? `'${loc.label}' 코스 짜기` : '위치를 골라주세요'
 
   return (
     <>
@@ -67,20 +63,12 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
           <span className="cl-loc-main">📍 지금 보고 있는 지역</span>
           {!hasCurrent && <span className="cl-loc-hint">지도를 동네까지 확대하면 사용할 수 있어요</span>}
         </button>
-        <button
-          className={`cl-loc-opt ${loc?.type === 'fav' ? 'on' : ''}`}
-          onClick={() => favCount >= 2 && setLoc((l) => (l?.type === 'fav' ? null : { type: 'fav', label: '내 즐겨찾기' }))}
-          disabled={favCount < 2}
-        >
-          <span className="cl-loc-main">⭐ 즐겨찾기로</span>
-          <span className="cl-loc-hint">{favCount >= 2 ? `저장한 ${favCount}곳에서 가까운 곳끼리 묶어 코스` : '저장한 곳이 2곳 이상이면 사용할 수 있어요'}</span>
-        </button>
 
-        <div className="cl-or">또는 동네 선택</div>
+        <div className="cl-or">또는 동네·역 선택</div>
         <input
           className="region-search"
           value={q}
-          onChange={(e) => { setQ(e.target.value); if (e.target.value.trim() && (loc?.type === 'current' || loc?.type === 'fav')) setLoc(null) }}
+          onChange={(e) => { setQ(e.target.value); if (e.target.value.trim() && loc?.type === 'current') setLoc(null) }}
           placeholder="동네·역 검색 (예: 용산역, 익선동)"
         />
         {sugs.length > 0 && (

@@ -66,10 +66,8 @@ function FitCourse({ stops }) {
 
 const KR_CENTER = [36.2, 127.8] // 대한민국 중앙 부근
 const KR_ZOOM = 7
-const MAP_MIN_ZOOM = 6.5 // 진입 줌(7)에서 한 단계만 축소해도 지구본으로 복귀
 
-// items 가 바뀌면 마커들이 보이도록 지도 영역을 맞춘다.
-// (지구본에서 전환되어 들어온 경우 initialCenter 가 있으므로 자동 맞춤은 생략)
+// items 가 바뀌면 마커들이 보이도록 지도 영역을 맞춘다. (initialCenter 를 준 경우 생략)
 function FitBounds({ points, skip }) {
   const map = useMap()
   useEffect(() => {
@@ -109,8 +107,8 @@ function FocusOnSelect({ items, selected }) {
   return null
 }
 
-// 줌/이동 감시: 현재 줌·영역 보고 + 너무 축소하면 지구본으로 복귀
-function ZoomWatcher({ onZoomOut, onZoom, onBounds, onMoving }) {
+// 줌/이동 감시: 현재 줌·영역 보고
+function ZoomWatcher({ onZoom, onBounds, onMoving }) {
   const report = (map) => {
     if (!onBounds) return
     const b = map.getBounds()
@@ -124,10 +122,6 @@ function ZoomWatcher({ onZoomOut, onZoom, onBounds, onMoving }) {
       onZoom && onZoom(z)
       report(map)
       onMoving && onMoving(false)
-      if (z <= MAP_MIN_ZOOM) {
-        const c = map.getCenter()
-        onZoomOut && onZoomOut([c.lng, c.lat]) // [lng, lat]
-      }
     },
     moveend() { report(map); onMoving && onMoving(false) },
   })
@@ -169,7 +163,7 @@ function FlyToRegion({ target }) {
   return null
 }
 
-export default function MapView({ items, selected, onSelect, onZoomOut, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, kind = 'food', limit = 10, initialCenter, initialZoom, course, onZoom }) {
+export default function MapView({ items, selected, onSelect, onSearchArea, onBounds, onMoving, myLoc, flyTarget, searching, kind = 'food', limit = 10, initialCenter, initialZoom, course, onZoom }) {
   const courseStops = course?.stops || []
   const hasCourse = courseStops.length > 0
   const valid = (items || []).filter((d) => d.lat != null && d.lng != null)
@@ -216,7 +210,7 @@ export default function MapView({ items, selected, onSelect, onZoomOut, onSearch
       <VectorBasemap />
       <FitBounds points={points} skip={!!initialCenter} />
       <FocusOnSelect items={valid} selected={selected} />
-      <ZoomWatcher onZoomOut={onZoomOut} onZoom={(z) => { setZoom(z); onZoom && onZoom(z) }} onBounds={onBounds} onMoving={onMoving} />
+      <ZoomWatcher onZoom={(z) => { setZoom(z); onZoom && onZoom(z) }} onBounds={onBounds} onMoving={onMoving} />
       <FlyToLoc loc={myLoc} />
       <FlyToRegion target={flyTarget} />
       <FitCourse stops={courseStops} />

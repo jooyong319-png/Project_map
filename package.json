@@ -1,9 +1,9 @@
 {
-  "name": "matjip-app",
+  "name": "kokkokkok",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "전국 맛집 평점순 웹 - React + React Router + Supabase + Google Places",
+  "description": "콕콕콕 — 동네·역만 고르면 공공데이터 + AI로 데이트·여행 하루 코스를 짜 주는 웹/앱 (React + Vite + Vercel 함수 + Capacitor)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -18,18 +18,14 @@
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/splash-screen": "^8.0.2",
     "@maplibre/maplibre-gl-leaflet": "^0.1.3",
-    "@supabase/supabase-js": "^2.45.4",
     "csv-parse": "^6.2.1",
-    "d3-geo": "^3.1.1",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^4.7.1",
     "proj4": "^2.20.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
-    "react-router-dom": "^6.26.2",
-    "topojson-client": "^3.1.0",
-    "world-atlas": "^2.0.2"
+    "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

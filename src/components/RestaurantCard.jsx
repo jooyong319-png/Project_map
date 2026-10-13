@@ -1,5 +1,3 @@
-import { PRICE_LABEL } from '../data/countries.js'
-
 // 네이버 블로그 개수 표기: 12345 → "1.2만", 5600 → "5,600"
 export function fmtBlog(n) {
   if (!n) return ''
@@ -7,14 +5,13 @@ export function fmtBlog(n) {
   return Number(n).toLocaleString()
 }
 
-export default function RestaurantCard({ rank, data, selected, bookmarked, onOpen, onBookmark }) {
+// 검색 결과 카드 — 장소 정보는 카카오 실시간(저장 안 함)
+export default function RestaurantCard({ rank, data, selected, onOpen }) {
   const medal = rank === 1 ? 'medal-g' : rank === 2 ? 'medal-s' : rank === 3 ? 'medal-b' : ''
   return (
     <div className={`card ${selected ? 'sel' : ''}`} onClick={() => onOpen(data)}>
       <div className="thumb" style={{ background: data.color }}>
-        {data.photo
-          ? <img className="thumb-img" src={data.photo} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          : <span className="thumb-emoji">{data.icon}</span>}
+        <span className="thumb-emoji">{data.icon}</span>
         <span className={`rank-badge ${medal}`}>{rank}</span>
       </div>
       <div className="info">
@@ -22,30 +19,11 @@ export default function RestaurantCard({ rank, data, selected, bookmarked, onOpe
           {data.name}
           {data.tags?.length > 0 && <span className="tag-badge">🏅 {data.tags[0]}</span>}
         </div>
-        <div className="meta">
-          {data.region}{data.cat ? ` · ${data.cat}` : ''}{data.priceLevel ? ` · ${PRICE_LABEL[data.priceLevel]}` : ''}
-        </div>
+        <div className="meta">{data.region}{data.cat ? ` · ${data.cat}` : ''}</div>
         <div className="rating-row">
-          {data.rating > 0 ? (
-            <>
-              <span className="rating-pill">★ {Number(data.rating).toFixed(1)}</span>
-              <span className="reviews">리뷰 {Number(data.reviews).toLocaleString()}</span>
-            </>
-          ) : (
-            <span className="src-pill">{data.source === 'kakao' ? '카카오맵' : '정보'}</span>
-          )}
-          {data.blog > 0 && <span className="blog-pill">📝 블로그 {fmtBlog(data.blog)}</span>}
+          <span className="src-pill">{data.source === 'kakao' ? '카카오맵' : '정보'}</span>
         </div>
       </div>
-      <button
-        className={`bm ${bookmarked ? 'on' : ''}`}
-        aria-label={bookmarked ? '저장됨' : '저장'}
-        onClick={(e) => { e.stopPropagation(); onBookmark(data) }}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-        </svg>
-      </button>
     </div>
   )
 }

@@ -1,8 +1,5 @@
 {
   "rewrites": [
-    { "source": "/place/:id", "destination": "/api/seo?type=place&id=:id" },
-    { "source": "/sitemap.xml", "destination": "/api/seo?type=sitemap" },
-    { "source": "/robots.txt", "destination": "/api/seo?type=robots" },
     { "source": "/((?!api/).*)", "destination": "/" }
   ]
 }
