@@ -74,6 +74,38 @@ function scorePop(area, rows, signguCd) {
   return n
 }
 
+// ── 데이트 적합도(fit 0~5) — 중심 관광지를 사람이 고르지 않도록 AI가 상식으로 판정 ──
+//  · 입력은 공공데이터(이름·분류·주소)뿐 → AI 입력 허용. 결과는 우리 가공물.
+//  · "이 가게 알아?"(지식)가 아니라 "공원 vs 체육공원" 같은 상식 판단이라 과장 위험이 낮다.
+async function scoreFit(area, key) {
+  const sights = area.places.filter((p) => p.kind === 'travel')
+  if (!sights.length || !key) return 0
+  const prompt = [
+    `너는 "${area.label}" 동네의 데이트 코스 큐레이터야. 아래 장소마다 "연인 데이트 코스의 중심(메인 볼거리)"으로 얼마나 적합한지 0~5점을 매겨.`,
+    '기준: 5=이 동네를 대표하는 데이트 명소(누구나 아는 큰 공원·궁궐·대표 거리) / 4=데이트로 좋은 곳(산책로·감성 거리·한옥거리·전시공간) / 3=괜찮음(박물관·갤러리·시장) / 2=곁들이기 좋음(편집숍·플래그십 매장) / 1=애매(일반 매장·특정 목적 시설) / 0=부적합(체육시설·기념비·종교 성지·관공서·음식 골목·주차장·학교·키즈 시설).',
+    '이름과 분류만 보고 상식으로 판단해. 형식: id|이름|분류|주소',
+    sights.map((p) => `${p.id}|${p.name}|${p.cat}|${(p.addr || '').split(' ').slice(1, 4).join(' ')}`).join('\n'),
+  ].join('\n')
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: { type: 'STRING' }, fit: { type: 'INTEGER' } }, required: ['id', 'fit'] } } },
+  }
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (r.ok) {
+        const got = JSON.parse((await r.json()).candidates?.[0]?.content?.parts?.[0]?.text || '[]')
+        const fit = new Map(got.map((g) => [g.id, Math.max(0, Math.min(5, g.fit | 0))]))
+        let n = 0
+        for (const p of sights) if (fit.has(p.id)) { p.fit = fit.get(p.id); n++ }
+        return n
+      }
+    } catch (_) {}
+    await new Promise((res) => setTimeout(res, 1500 * (i + 1)))
+  }
+  return 0
+}
+
 // ── 주차장 ──
 const hm = (a, b) => (a && b ? `${a}~${b}` : '')
 const won = (n) => (n ? `${Number(n).toLocaleString()}원` : '')
@@ -110,6 +142,8 @@ export async function enrich(slug) {
     area.popAsOf = baseYm
     console.log(`인기 점수(연관 관광지 ${baseYm || '없음'}, ${rows.length}행): ${n}곳`)
   }
+  const nFit = await scoreFit(area, env.GEMINI_API_KEY)
+  console.log(`데이트 적합도: 관광지 ${nFit}곳 판정`)
   area.parking = await readParking(area.bbox)
   console.log(`주차장: ${area.parking.length}곳 (공영 ${area.parking.filter((p) => p.type === '공영').length} · 민영 ${area.parking.filter((p) => p.type === '민영').length})`)
   if (!area.sources.includes('한국관광공사 연관 관광지')) area.sources.push('한국관광공사 연관 관광지', '전국주차장정보표준데이터')
