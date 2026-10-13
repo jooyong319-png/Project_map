@@ -470,7 +470,7 @@ export default function Home() {
             </>
           )}
         </div>
-        <GeoPanel items={mode === 'browse' ? visible : []} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} kind={kind} course={course} courseLoading={courseLoading} />
+        <GeoPanel items={mode === 'browse' ? visible : []} selected={selectedId} onSelect={onPick} onAreaSearch={onAreaSearch} onBounds={onBoundsChange} onMoving={setMapMoving} navTo={navTo} loading={loading} limit={limit} kind={kind} course={mode === 'course' ? course : null} courseLoading={courseLoading} />
         <DetailModal data={openItem} onClose={() => setOpenItem(null)} sheet="half" />
       </div>
       {notice && <div className="detail-toast" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 3000 }}>{notice}</div>}
