@@ -54,6 +54,11 @@ export default function CoursePanel({ course, loading, selected, onSelectStop, o
       ) : (
         <>
           {course.summary && <div className="course-summary">{course.summary}</div>}
+          {course.start && (
+            <div className="course-meta" style={{ margin: '4px 0 8px' }}>
+              🚉 {course.start.label}에서 출발 · 첫 장소까지 도보 {fmtMin(course.start.walk?.min)}
+            </div>
+          )}
           <div className="course-stops">
             {course.stops.map((s, i) => (
               <Fragment key={s.id}>

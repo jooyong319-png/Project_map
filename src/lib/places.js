@@ -20,7 +20,8 @@ export async function getCuration(tag = '') {
 }
 
 // AI 코스 짜기 — 지도 영역(bbox)+테마, 또는 즐겨찾기 후보(candidates)로 하루 동선을 받아온다.
-export async function getCourse(bbox, theme = '', candidates = null) {
+// from = { label, lng, lat } — 역·장소에서 출발할 때(첫 장소를 거기서 가깝게, 도보 시간 표시)
+export async function getCourse(bbox, theme = '', candidates = null, from = null) {
   try {
     if (candidates) {
       // 즐겨찾기 참고 → POST 로 지역 bbox + 저장목록 함께 전달
@@ -32,7 +33,8 @@ export async function getCourse(bbox, theme = '', candidates = null) {
       return null
     }
     const t = theme ? `&theme=${encodeURIComponent(theme)}` : ''
-    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}`)
+    const f = from ? `&from=${encodeURIComponent(from.label)}&fx=${from.lng}&fy=${from.lat}` : ''
+    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}`)
     if (res.ok) return (await res.json()).course || null
   } catch (_) {}
   return null

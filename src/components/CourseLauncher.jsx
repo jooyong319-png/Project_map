@@ -2,13 +2,15 @@ import { useState, useEffect, useRef } from 'react'
 
 // AI 코스 런처 — 위치 모드 3가지 중 하나 + 테마(선택) 정하고 '코스 짜기'.
 //   ① 지금 보고 있는 지역  ② ⭐ 즐겨찾기로  ③ 기본(동네 검색/인기칩)
+// 데이터가 준비된 동네(src/data/places)만 — 역은 spot:true → 역 주변 걸어갈 범위로 좁히고 역에서 출발
 const POPULAR = [
-  { label: '서울 종로', center: [126.991, 37.572] },
-  { label: '서울 강남', center: [127.028, 37.498] },
-  { label: '서울 성수', center: [127.056, 37.544] },
-  { label: '서울 홍대', center: [126.923, 37.556] },
-  { label: '부산 해운대', center: [129.160, 35.163] },
-  { label: '경주', center: [129.225, 35.842] },
+  { label: '성수역', center: [127.0557, 37.5446], spot: true },
+  { label: '용산역', center: [126.9648, 37.5298], spot: true },
+  { label: '삼각지역', center: [126.9731, 37.5348], spot: true },
+  { label: '종로3가역', center: [126.9917, 37.5714], spot: true },
+  { label: '익선동', center: [126.9893, 37.5741], spot: true },
+  { label: '천안 불당동', center: [127.1095, 36.8125] },
+  { label: '천안 신부동', center: [127.1556, 36.8196] },
 ]
 const THEME_CHIPS = ['데이트', '저녁 데이트', '가족 나들이', '혼자 힐링', '맛집 위주', '감성 카페', '액티비티']
 
@@ -34,13 +36,13 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
     return () => clearTimeout(t)
   }, [q])
 
-  const pickRegion = (center, label) => { pickedRef.current = true; setLoc({ type: 'region', center, label }); setQ(label); setSugs([]) }
+  const pickRegion = (center, label, spot = false) => { pickedRef.current = true; setLoc({ type: 'region', center, label, spot }); setQ(label); setSugs([]) }
   const submit = () => {
     if (!loc) return
     const th = theme.trim()
     if (loc.type === 'current') onUseCurrent(th)
     else if (loc.type === 'fav') onUseFav(th)
-    else onLaunch(loc.center, loc.label, th)
+    else onLaunch(loc.center, loc.label, th, loc.spot)
   }
   const btnLabel = loc?.type === 'fav' ? '즐겨찾기로 코스 짜기'
     : loc ? `'${loc.label}' 코스 짜기`
@@ -78,13 +80,14 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
           className="region-search"
           value={q}
           onChange={(e) => { setQ(e.target.value); if (e.target.value.trim() && (loc?.type === 'current' || loc?.type === 'fav')) setLoc(null) }}
-          placeholder="동네 검색 (예: 종로, 해운대)"
+          placeholder="동네·역 검색 (예: 용산역, 익선동)"
         />
         {sugs.length > 0 && (
           <div className="region-suggests">
             {sugs.map((s) => (
-              <button key={s.label} className="region-suggest" onClick={() => pickRegion([s.lng, s.lat], s.label)}>
-                <span className="region-suggest-ic">📍</span>{s.label}
+              <button key={s.label} className="region-suggest" onClick={() => pickRegion([s.lng, s.lat], s.label, s.kind === 'station' || s.kind === 'spot')}>
+                <span className="region-suggest-ic">{s.kind === 'station' ? '🚉' : '📍'}</span>{s.label}
+                {s.sub && <span style={{ color: '#999', fontSize: 12, marginLeft: 6 }}>{s.sub}</span>}
               </button>
             ))}
           </div>
@@ -94,7 +97,7 @@ export default function CourseLauncher({ onLaunch, onUseCurrent, onUseFav, hasCu
             <button
               key={p.label}
               className={`cl-chip ${loc?.type === 'region' && loc.label === p.label ? 'on' : ''}`}
-              onClick={() => pickRegion(p.center, p.label)}
+              onClick={() => pickRegion(p.center, p.label, !!p.spot)}
             >
               {p.label}
             </button>

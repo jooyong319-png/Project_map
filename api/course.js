@@ -101,7 +101,7 @@ function heuristicCourse(cand) {
 }
 
 // Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, cluster=흩어진 후보를 가까운 것끼리.
-async function geminiCourse(cand, key, theme, cluster = false) {
+async function geminiCourse(cand, key, theme, cluster = false, from = null) {
   const evening = isEvening(theme)
   const byId = new Map()
   const flat = []
@@ -124,6 +124,7 @@ async function geminiCourse(cand, key, theme, cluster = false) {
       ? '- 저녁(18시 이후 시작) 코스야. 저녁 식사 1곳 → 걷기 좋은 곳·야경 1곳(있으면) → 와인바·바·이자카야·디저트 카페 중 1곳, 총 3~4곳. use(이용시간)를 보고 저녁에 문 닫는 곳(예: ~19:00 마감, 브런치·낮 카페)은 빼.'
       : '- 식사(kind=food, cat≠카페) 2곳(점심·저녁), 카페(cat=카페) 1곳, 구경(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→카페→구경→저녁 느낌). 후보가 모자라면 있는 만큼.',
     '- 서로 걸어서 15분 안쪽으로 이어지게 가까운 곳끼리 골라 (region·주소 참고).',
+    from ? `- 출발점은 "${from.label}"이야. 첫 장소는 여기서 걸어서 가까운 곳으로 하고, 동선이 출발점에서 자연스럽게 이어지게 해. summary 에 출발점을 언급해.` : '',
     '- AI 픽 태그의 note 는 그 가게에 대한 참고 설명이야. 공공 타이틀(모범음식점·안심식당·착한가격·백년가게·노포)은 reason 에 자연스럽게 언급해도 돼.',
     '- 관광공사 소개 태그가 있는 곳은 이용시간이 확인된 곳이라 우선해. rest(쉬는 날)가 있으면 reason 끝에 "(○요일 휴무)"처럼 짧게 덧붙여.',
     '- since(영업 시작 연도, 오래될수록 검증된 곳)와 cat·tags 를 특징 근거로 참고해. 없는 정보(평점·후기 수 등)를 지어내지 마.',
@@ -248,6 +249,9 @@ function parseBbox(v) {
 
 export default async function handler(req, res) {
   let theme = (req.query?.theme || '').toString().slice(0, 80)
+  // 출발점(역·장소) — 런처에서 역을 고르면 옴
+  const fx = Number(req.query?.fx), fy = Number(req.query?.fy)
+  const from = req.query?.from && Number.isFinite(fx) && Number.isFinite(fy) ? { label: req.query.from.toString().slice(0, 40), lng: fx, lat: fy } : null
   let bbox = parseBbox(req.query?.bbox)
   let favs = []
   try {
@@ -289,7 +293,7 @@ export default async function handler(req, res) {
     if (key) {
       // 일시적 실패(혼잡/타임아웃) 대비 최대 3회 재시도 후에만 휴리스틱 폴백
       for (let i = 0; i < 3 && !course; i++) {
-        try { course = await geminiCourse(cand, key, theme, cluster) }
+        try { course = await geminiCourse(cand, key, theme, cluster, from) }
         catch (_) { if (i < 2) await new Promise((r) => setTimeout(r, 400 * (i + 1))) }
       }
       if (!course) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // 3회 다 실패 → 자동 구성
@@ -303,6 +307,8 @@ export default async function handler(req, res) {
       const gkey = googleKey()
       if (gkey) course.stops = await cachedEnrich(course.stops, course.stops.length, (it) => enrichWithGoogle(it, gkey))
     }
+    // 출발점 → 첫 장소 도보
+    if (from && course.stops?.length) course.start = { label: from.label, walk: walkLeg(from, course.stops[0]) }
     // 구간별 이동시간(차/대중교통/도보)
     if (course.stops?.length > 1) {
       course.legs = await buildLegs(course.stops, process.env.KAKAO_REST_KEY, process.env.ODSAY_API_KEY)

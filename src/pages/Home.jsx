@@ -180,9 +180,9 @@ export default function Home() {
     mapBoundsRef.current = b
     // 지역 이동 후 도착하면(지도가 영역 보고) 그때 AI 코스 / 일반 검색
     if (pendingCourseRef.current) {
-      const { bbox, theme, candidates } = pendingCourseRef.current
+      const { bbox, theme, candidates, from } = pendingCourseRef.current
       pendingCourseRef.current = null
-      onCourse(bbox, theme, candidates)
+      onCourse(bbox, theme, candidates, from)
       return
     }
     if (pendingSearchRef.current) {
@@ -254,12 +254,12 @@ export default function Home() {
     .map((d) => ({ id: d.id, name: d.name, kind: d.kind || 'food', region: d.region || '', tags: d.tags || [], licensed: d.licensed || '', lat: d.lat, lng: d.lng }))
 
   // 🧭 AI 코스 짜기 — 지역 + 테마(선택) + 즐겨찾기 참고(선택)
-  const onCourse = async (bbox, theme = '', candidates = null) => {
+  const onCourse = async (bbox, theme = '', candidates = null, from = null) => {
     setCourseLoading(true)
     setCourse(null)
     setSheet('half') // 모바일: 지도+코스 같이 보이는 중간 크기로
     try {
-      const c = await getCourse(bbox, theme, candidates)
+      const c = await getCourse(bbox, theme, candidates, from)
       if (!c || !c.stops?.length) {
         setCourse(null)
         alert('이 지역엔 코스로 묶을 저장된 곳이 부족해요. 먼저 음식·관광지·숙소를 검색해 보세요 🙏')
@@ -286,12 +286,13 @@ export default function Home() {
   }
   const onClearCourse = () => { setCourse(null); setCourseLoading(false) }
   // [기본 모드] 런처에서 지역+테마 선택 → 그 동네로 날아가 도착하면 코스 생성(onBoundsChange 에서 트리거)
-  const launchCourse = (center, label, theme = '') => {
+  //  spot(역·장소) = 그 지점에서 걸어서 다닐 범위(±약 1.2km)로 좁히고, 출발점(from)으로 넘긴다
+  const launchCourse = (center, label, theme = '', spot = false) => {
     setCourseLauncher(false)
     setCourse(null)
     setPickedLabel(label || '')
-    const d = 0.02 // ≈2km 박스
-    pendingCourseRef.current = { bbox: [center[0] - d, center[1] - d, center[0] + d, center[1] + d], theme }
+    const d = spot ? 0.012 : 0.02 // 역 ≈1.2km / 동네 ≈2km 박스
+    pendingCourseRef.current = { bbox: [center[0] - d, center[1] - d, center[0] + d, center[1] + d], theme, from: spot ? { label, lng: center[0], lat: center[1] } : null }
     setNavTo({ center, zoom: 15 })
   }
   // [지금 보고 있는 지역] 현재 지도 영역으로 바로 코스
