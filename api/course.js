@@ -79,8 +79,9 @@ function openAt(use, time) {
   })
 }
 // 시각 채우기 + 검사: AI 가 빠뜨렸거나 폴백 코스면 시작 시각부터 90분 간격
-function fillTimes(stops, evening) {
-  let cur = evening ? toMin(18, 30) : toMin(12, 0)
+const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+function fillTimes(stops, evening, startMin = null) {
+  let cur = startMin ?? (evening ? toMin(18, 30) : toMin(12, 0))
   for (const s of stops || []) {
     if (!s.time) s.time = `${String(Math.floor(cur / 60) % 24).padStart(2, '0')}:${String(cur % 60).padStart(2, '0')}`
     const [h, m] = s.time.split(':'); cur = toMin(h, m) + 90
@@ -128,14 +129,15 @@ function heuristicCourse(cand) {
 }
 
 // Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, from=출발점(역)
-async function geminiCourse(cand, key, theme, from = null, evening = isEvening(theme)) {
+// fixed = { label, time, start } — 사용자가 정해 둔 일정(그 시각에 그곳). 코스는 그 전을 채우고 근처에서 끝난다
+async function geminiCourse(cand, key, theme, from = null, evening = isEvening(theme), fixed = null) {
   const anchor = cand.anchor
   const byId = new Map()
   const flat = []
   for (const k of ['stay', 'food', 'travel']) {
     for (const p of cand[k]) {
       byId.set(p.id, p)
-      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, menu: p.menu || p.price || undefined, use: p.hours?.use || undefined, rest: p.hours?.rest || undefined, note: p.pick || undefined })
+      flat.push({ id: p.id, name: p.name, kind: p.kind || k, region: p.region || '', cat: p.cat || '', tags: p.tags || [], since: sinceYear(p) || undefined, menu: p.menu || p.price || undefined, use: p.hours?.use || undefined, rest: p.hours?.rest || undefined, note: p.pick || undefined, toFixed: fixed ? Math.round(haversine(p, fixed)) : undefined })
     }
   }
   const th = (theme || '').trim()
@@ -154,7 +156,8 @@ async function geminiCourse(cand, key, theme, from = null, evening = isEvening(t
     '- 관광공사 소개 태그가 있는 곳은 이용시간이 확인된 곳이라 우선해. rest(쉬는 날)가 있으면 reason 끝에 "(○요일 휴무)"처럼 짧게 덧붙여.',
     '- since(영업 시작 연도, 오래될수록 검증된 곳)와 cat·tags 를 특징 근거로 참고해. 없는 정보(평점·후기 수 등)를 지어내지 마.',
     '- 각 stop 의 reason 은 한국어 한 문장, 친근하고 구체적으로.',
-    `- 각 stop 에 time(도착 예상 시각, 24시간제 "HH:MM")을 넣어. ${evening ? '18:30 전후' : '12:00 전후'}에 시작하고, 식사·카페는 약 1시간, 구경은 1~1.5시간 머문다고 보고 이동 시간을 더해. use(이용시간)가 있으면 그 안에 들어오게 순서와 시각을 맞춰.`,
+    fixed ? `- 중요: 사용자는 ${fixed.time}에 "${fixed.label}"에 가기로 이미 정해 뒀어(후보 목록에 없는 곳, 코스에 넣지 마). 코스는 ${fixed.start}쯤 시작해서 ${fixed.time} 10분 전까지 끝나야 하고, 마지막 장소는 toFixed(그곳까지 거리, m)가 700 이하인 후보로 골라(꼭 지켜). 그곳이 식당·술집이면 앞 코스에선 식사 대신 카페·디저트·구경·산책 위주로 구성해. 2~4곳. summary 에 "${fixed.time} ${fixed.label} 가기 전"을 자연스럽게 넣어.` : '',
+    `- 각 stop 에 time(도착 예상 시각, 24시간제 "HH:MM")을 넣어. ${fixed ? `${fixed.start} 전후` : evening ? '18:30 전후' : '12:00 전후'}에 시작하고, 식사·카페는 약 1시간, 구경은 1~1.5시간 머문다고 보고 이동 시간을 더해. use(이용시간)가 있으면 그 안에 들어오게 순서와 시각을 맞춰.`,
     '- title 은 이 동선을 한 줄로 표현(예: "성수 감성 한 바퀴"), summary 는 한 문장 소개.',
     th ? `- 사용자가 원하는 테마: "${th}". 이 테마 분위기에 맞게 장소를 고르고, 순서·이유·제목에도 테마를 자연스럽게 반영해.` : '',
     '후보:',
@@ -310,10 +313,17 @@ export default async function handler(req, res) {
   const car = req.query?.car === '1'
   const from = req.query?.from && Number.isFinite(fx) && Number.isFinite(fy) ? { label: req.query.from.toString().slice(0, 40), lng: fx, lat: fy } : null
   const bbox = parseBbox(req.query?.bbox)
+  // 정해 둔 일정(그 시각에 그곳) — fixed=이름, kx·ky=좌표, kt=시각 "HH:MM". 코스는 3시간 전쯤 시작해 그 근처에서 끝난다.
+  //  위치는 화면이 카카오 검색으로 그 자리에서 찾은 값(저장 안 함). AI 에는 이름과 시각만 넘긴다.
+  const kx = Number(req.query?.kx), ky = Number(req.query?.ky)
+  const kt = /^\d{1,2}:\d{2}$/.test(req.query?.kt || '') ? req.query.kt.padStart(5, '0') : null
+  const fixedAt = req.query?.fixed && kt && Number.isFinite(kx) && Number.isFinite(ky) ? { label: req.query.fixed.toString().slice(0, 40), lng: kx, lat: ky, time: kt } : null
+  const fixedStart = fixedAt ? Math.max(toMin(10, 0), toMin(...fixedAt.time.split(':')) - 180) : null
+  if (fixedAt) fixedAt.start = hhmm(fixedStart)
   try {
     if (!bbox) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
-    // 낮/저녁: 화면의 '언제' 버튼(time=evening) 또는 테마 글자(저녁·밤·야경…)
-    const evening = req.query?.time === 'evening' || isEvening(theme)
+    // 낮/저녁: 화면의 '언제' 버튼(time=evening) 또는 테마 글자(저녁·밤·야경…). 정해 둔 일정이 있으면 시작 시각으로
+    const evening = fixedAt ? fixedStart >= toMin(17, 0) : (req.query?.time === 'evening' || isEvening(theme))
     const cand = await gatherCandidates(bbox, evening)
     const total = cand.food.length + cand.travel.length + cand.stay.length
     if (total < 2) { res.status(200).json({ course: null, reason: 'empty' }); return }
@@ -322,7 +332,7 @@ export default async function handler(req, res) {
     if (key) {
       // 일시적 실패(혼잡/타임아웃) 대비 최대 3회 재시도 후에만 휴리스틱 폴백
       for (let i = 0; i < 3 && !course; i++) {
-        try { course = await geminiCourse(cand, key, theme, from, evening) }
+        try { course = await geminiCourse(cand, key, theme, from, evening, fixedAt) }
         catch (_) { if (i < 2) await new Promise((r) => setTimeout(r, 400 * (i + 1))) }
       }
       if (!course) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // 3회 다 실패 → 자동 구성
@@ -331,7 +341,26 @@ export default async function handler(req, res) {
     }
     if (!course) { res.status(200).json({ course: null, reason: 'empty' }); return }
     course.evening = evening
-    fillTimes(course.stops, evening) // 예상 시각 채우기 + 이용시간 안인지(timeOk)
+    // 정해 둔 일정: AI 가 '마지막은 가까운 곳'을 어기면(900m 초과) 가장 가까운 장소를 맨 뒤로 옮기고 시각은 다시 계산
+    if (fixedAt && course.stops?.length > 1) {
+      const dist = (s) => haversine(s, fixedAt)
+      const last = course.stops[course.stops.length - 1]
+      if (dist(last) > 900) {
+        const near = course.stops.reduce((a, b) => (dist(b) < dist(a) ? b : a))
+        if (near !== last) {
+          course.stops = [...course.stops.filter((s) => s !== near), near].map((s, i) => ({ ...s, order: i + 1, time: undefined }))
+          course.reordered = true
+        }
+      }
+    }
+    fillTimes(course.stops, evening, fixedStart) // 예상 시각 채우기 + 이용시간 안인지(timeOk)
+    // 정해 둔 일정: 마지막 장소 → 그곳 도보, 늦지 않는지(마지막 장소에 최소 30분 머문다고 보고)
+    if (fixedAt && course.stops?.length) {
+      const last = course.stops[course.stops.length - 1]
+      const walk = walkLeg(last, fixedAt)
+      const [h, m] = (last.time || '00:00').split(':')
+      course.fixed = { label: fixedAt.label, time: fixedAt.time, walk, late: toMin(h, m) + 30 + walk.min > toMin(...fixedAt.time.split(':')) }
+    }
     // 중심 관광지 · 주차장(🚗 차로 가요)
     if (cand.anchor) course.anchor = { id: cand.anchor.id, name: cand.anchor.name }
     if (car) course.parking = await parkingFor(cand.anchor || course.stops?.[0], process.env.KAKAO_REST_KEY)

@@ -21,6 +21,7 @@ export const RLTE = {
   seongsu: { areaCd: '11', signguCd: '11200' },        // 성동구
   yongsan: { areaCd: '11', signguCd: '11170' },        // 용산구
   jongno3: { areaCd: '11', signguCd: '11110' },        // 종로구
+  itaewon: { areaCd: '11', signguCd: '11170' },        // 용산구(이태원·한남)
   cheonan_buldang: { areaCd: '44', signguCd: '44133' }, // 천안 서북구
   cheonan_sinbu: { areaCd: '44', signguCd: '44131' },   // 천안 동남구
 }

@@ -20,6 +20,7 @@ const POINTS = {
   seongsu: { label: '성수역', c: [127.0557, 37.5446], spot: true },
   yongsan: { label: '용산역', c: [126.9648, 37.5298], spot: true },
   jongno3: { label: '종로3가역', c: [126.9917, 37.5714], spot: true },
+  itaewon: { label: '이태원역', c: [126.9945, 37.5345], spot: true },
   cheonan_buldang: { label: '천안 불당동', c: [127.1095, 36.8125] },
   cheonan_sinbu: { label: '천안 신부동', c: [127.1556, 36.8196] },
 }

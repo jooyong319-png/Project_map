@@ -8,11 +8,13 @@ export function isKorea(lat, lng) {
 // AI 코스 짜기 — 지도 영역(bbox)+테마로 하루 동선을 받아온다.
 // from = { label, lng, lat } — 역·장소에서 출발할 때(첫 장소를 거기서 가깝게, 도보 시간 표시)
 // car = 🚗 차로 가요 → 응답에 주차장(parking) / time = 'day' | 'evening'
-export async function getCourse(bbox, theme = '', from = null, car = false, time = 'day') {
+// fixed = { label, lng, lat, time } — 정해 둔 일정(그 시각에 그곳). 코스는 그 전을 채운다
+export async function getCourse(bbox, theme = '', from = null, car = false, time = 'day', fixed = null) {
   try {
     const t = theme ? `&theme=${encodeURIComponent(theme)}` : ''
     const f = from ? `&from=${encodeURIComponent(from.label)}&fx=${from.lng}&fy=${from.lat}` : ''
-    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}${car ? '&car=1' : ''}&time=${time}`)
+    const k = fixed ? `&fixed=${encodeURIComponent(fixed.label)}&kx=${fixed.lng}&ky=${fixed.lat}&kt=${fixed.time}` : ''
+    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}${k}${car ? '&car=1' : ''}&time=${time}`)
     if (res.status === 429) return { limited: true } // 서버 호출 제한
     if (res.ok) return (await res.json()).course || null
   } catch (_) {}

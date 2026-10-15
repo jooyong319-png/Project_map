@@ -69,7 +69,7 @@ export default function CourseView({ course, loading, selected, onSelectStop, on
             <li key={s.id} className="cf-stop">
               <div className="cf-rail">
                 <span className={`cf-num ${isAnchor ? 'anchor' : ''}`} style={{ background: r.color }}>{s.order}</span>
-                {i < course.stops.length - 1 && <span className="cf-line" />}
+                {(i < course.stops.length - 1 || course.fixed) && <span className="cf-line" />}
               </div>
               <div className="cf-body">
                 <button type="button" className={`cf-stop-btn ${selected === s.id ? 'on' : ''}`} onClick={() => onSelectStop && onSelectStop(s)}>
@@ -89,6 +89,19 @@ export default function CourseView({ course, loading, selected, onSelectStop, on
             </li>
           )
         })}
+        {course.fixed && (
+          <li className="cf-stop">
+            <div className="cf-rail"><span className="cf-num fixed" aria-hidden="true">🎯</span></div>
+            <div className="cf-body">
+              <div className="cf-fixed-stop">
+                <span className="cf-when">{course.fixed.time} 정해 둔 일정</span>
+                <span className="cf-name">{course.fixed.label}</span>
+                <span className="cf-hours">마지막 장소에서 도보 {fmtMin(course.fixed.walk?.min)}</span>
+                {course.fixed.late && <span className="cf-warn">빠듯해요 · 마지막 장소에선 조금 일찍 나서세요</span>}
+              </div>
+            </div>
+          </li>
+        )}
       </ol>
 
       {course.parking?.length > 0 && (

@@ -39,6 +39,13 @@
 .cf-car { margin-top: 22px; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 0 16px; background: #fff; border: 1.5px solid #E6DED5; border-radius: 14px; font-size: 15px; cursor: pointer; }
 .cf-car small { margin-left: 4px; font-size: 13px; color: #8A8079; }
 .cf-car input { width: 22px; height: 22px; accent-color: #C4561E; flex-shrink: 0; }
+.cf-fixed-toggle { margin-top: 12px; }
+.cf-fixed { margin-top: 8px; padding: 12px 14px; background: #fff; border: 1.5px solid #E6DED5; border-radius: 14px; display: flex; flex-direction: column; gap: 10px; }
+.cf-fixed-row { display: flex; align-items: center; gap: 12px; font-size: 14px; color: #5E554E; }
+.cf-fixed-row > span { width: 34px; flex-shrink: 0; font-weight: 700; }
+.cf-fixed-row input, .cf-fixed-row select { flex: 1; min-width: 0; height: 42px; padding: 0 12px; border: 1.5px solid #E6DED5; border-radius: 10px; font: inherit; font-size: 15px; color: #1F1A17; background: #FBF7F2; }
+.cf-fixed-row input:focus, .cf-fixed-row select:focus { outline: 0; border-color: #C4561E; }
+.cf-fixed-hint { font-size: 12.5px; color: #A3461A; }
 .cf-grow { flex: 1; min-height: 24px; }
 .cf-submit { width: 100%; height: 56px; border: 0; border-radius: 16px; background: #C4561E; color: #fff; font-size: 17px; font-weight: 800; }
 .cf-submit:hover:not(:disabled) { background: #A9481A; }
@@ -65,6 +72,9 @@
 .cf-rail { display: flex; flex-direction: column; align-items: center; padding-top: 6px; }
 .cf-num { width: 30px; height: 30px; border-radius: 15px; color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .cf-num.anchor { box-shadow: 0 0 0 3px #FFE2D1; }
+.cf-num.fixed { background: #1F1A17; font-size: 15px; }
+.cf-fixed-stop { display: flex; flex-direction: column; gap: 3px; padding: 6px 10px 12px; }
+.cf-fixed-stop .cf-when { color: #1F1A17; }
 .cf-line { flex: 1; width: 2px; background: #E6DED5; margin: 4px 0; }
 .cf-body { min-width: 0; }
 .cf-stop-btn { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; border: 0; background: none; padding: 6px 10px 8px; border-radius: 12px; color: inherit; }
