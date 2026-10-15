@@ -207,7 +207,7 @@ export default function Home() {
       if (!c || !c.stops?.length) {
         setCourse(null)
         setMode('start')
-        say('이 동네는 아직 코스 데이터가 준비 중이에요 🙏 성수·용산·종로·이태원·천안에서 먼저 써 보세요')
+        say('이 동네는 아직 코스 데이터가 준비 중이에요 🙏 추천 칩의 동네(성수·용산·종로·이태원·연남·을지로·송리단길·천안)에서 써 보세요')
         return null
       }
       setCourse(c)

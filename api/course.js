@@ -5,7 +5,7 @@
 // 호출:  GET /api/course?bbox=서,남,동,북
 // 환경변수: GEMINI_API_KEY (없으면 폴백), GEMINI_MODEL(선택, 기본 gemini-2.5-flash)
 
-import { placesIn, parkingNear } from '../lib/areas.js'
+import { placesIn, parkingNear, areaOf } from '../lib/areas.js'
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
@@ -54,7 +54,9 @@ const sightTier = (p) => (p.cat === '쇼핑' ? 0 : 1) // 관광지·문화시설
 //  저녁 코스는 밤 적합도(night) 60% + 낮 적합도(fit) 40% — 실내 전시·궁궐처럼 밤에 닫는 곳이 중심이 되지 않게.
 //  night 만 쓰지 않는 이유: 항목이 많은 동네(성수 80곳)에선 모델이 매장까지 night 5를 주는 등 과대평가 → fit 으로 눌러 준다
 const anchorScore = (p, evening = false) => (evening ? (p.night ?? 2) * 6 + (p.fit ?? 2) * 4 : (p.fit ?? 2) * 10) + Math.min(p.pop || 0, 30) / 3 + (curated(p) ? 2 : 0)
-const anchorOk = (p, evening) => p.fit !== 0 && !(evening && p.night === 0)
+// 중심 자격: 낮 0점(체육시설·기념비·음식 골목…)은 제외. 단 저녁엔 밤 4점 이상이면 허용 — 을지로 노가리골목·포장마차거리처럼 밤에만 빛나는 곳
+const anchorOk = (p, evening) => (evening ? p.night !== 0 && (p.fit !== 0 || (p.night ?? 0) >= 4) : p.fit !== 0)
+const ANCHOR_FROM_MAX = 900 // 역에서 출발할 때 중심은 역에서 이 거리(m) 안 — 범위 사각형 모서리의 먼 명소(을지로3가역→인사동 1.1km)가 중심이 되지 않게
 // 이용시간에 적힌 마감이 19시 전이면 저녁엔 제외("11:00~18:00" 등). 시간 정보가 없으면 판단하지 않는다
 const closesEarly = (p) => {
   const ends = [...String(p.hours?.use || '').matchAll(/~\s*(\d{1,2}):\d{2}/g)].map((m) => +m[1])
@@ -90,12 +92,20 @@ function fillTimes(stops, evening, startMin = null) {
 }
 
 // exclude = 직전 코스 장소 id ('다른 코스'에서 같은 가게가 반복되지 않게). 빼고 나서 너무 적어지면 그 종류는 빼지 않는다
-async function gatherCandidates(bbox, evening = false, exclude = new Set()) {
+async function gatherCandidates(bbox, evening = false, exclude = new Set(), from = null) {
   const local = placesIn(bbox).map((p) => ({ ...p, region: p.region || p.addr || '' })).filter((p) => !(evening && closesEarly(p)))
   const fresh = (list, min) => { const f = list.filter((p) => !exclude.has(p.id)); return f.length >= min ? f : list }
   if (local.length) {
     // ① 중심 관광지: 최고점대에서 무작위(다시 짜면 다른 중심) → ② 그 1km 안에서 맛집·카페·다른 구경거리
-    const sights = local.filter((p) => p.kind === 'travel' && anchorOk(p, evening)).sort((a, b) => anchorScore(b, evening) - anchorScore(a, evening))
+    let sights = local.filter((p) => p.kind === 'travel' && anchorOk(p, evening)).sort((a, b) => anchorScore(b, evening) - anchorScore(a, evening))
+    // 역 출발: 그 역이 속한 동네의 관광지를 먼저(을지로3가역 → 종묘·인사동 말고 세운상가·노가리골목), 없으면 전체
+    if (from) {
+      const home = areaOf(from)
+      const mine = sights.filter((p) => p.area === home && haversine(p, from) <= ANCHOR_FROM_MAX)
+      if (mine.length) sights = mine
+    }
+    // 그다음 가까운 단계부터(600m → 900m). 없으면 넓힌다
+    if (from) for (const r of [600, ANCHOR_FROM_MAX]) { const close = sights.filter((p) => haversine(p, from) <= r); if (close.length) { sights = close; break } }
     // 1등 근처 점수대(-5점 이내)에서 고르게 무작위 — 동점이 많을 때 앞쪽만 뽑히지 않게. 직전 중심은 다른 후보가 있으면 피한다
     const best = sights.length ? anchorScore(sights[0], evening) : 0
     const anchor = sights.length ? shuffle(fresh(sights.filter((p) => anchorScore(p, evening) >= best - 5), 1))[0] : null
@@ -329,7 +339,7 @@ export default async function handler(req, res) {
     // 낮/저녁: 화면의 '언제' 버튼(time=evening) 또는 테마 글자(저녁·밤·야경…). 정해 둔 일정이 있으면 시작 시각으로
     const evening = fixedAt ? fixedStart >= toMin(17, 0) : (req.query?.time === 'evening' || isEvening(theme))
     const exclude = new Set((req.query?.ex || '').toString().split(',').filter(Boolean).slice(0, 30)) // 다른 코스: 직전 장소 제외
-    const cand = await gatherCandidates(bbox, evening, exclude)
+    const cand = await gatherCandidates(bbox, evening, exclude, from || fixedAt)
     const total = cand.food.length + cand.travel.length + cand.stay.length
     if (total < 2) { res.status(200).json({ course: null, reason: 'empty' }); return }
     const key = process.env.GEMINI_API_KEY

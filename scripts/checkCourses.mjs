@@ -21,9 +21,13 @@ const POINTS = {
   yongsan: { label: '용산역', c: [126.9648, 37.5298], spot: true },
   jongno3: { label: '종로3가역', c: [126.9917, 37.5714], spot: true },
   itaewon: { label: '이태원역', c: [126.9945, 37.5345], spot: true },
+  yeonnam: { label: '연남동', c: [126.9225, 37.5627], spot: true },
+  euljiro: { label: '을지로3가역', c: [126.9926, 37.5663], spot: true },
+  songridan: { label: '석촌호수', c: [127.1040, 37.5097], spot: true },
   cheonan_buldang: { label: '천안 불당동', c: [127.1095, 36.8125] },
   cheonan_sinbu: { label: '천안 신부동', c: [127.1556, 36.8196] },
 }
+const haversine2 = (a, b) => meters(a, b)
 const meters = (a, b) => { const dx = (a.lng - b.lng) * 88000, dy = (a.lat - b.lat) * 111000; return Math.round(Math.sqrt(dx * dx + dy * dy)) }
 const lastClose = (use = '') => { const e = [...String(use).matchAll(/~\s*(\d{1,2}):\d{2}/g)].map((m) => +m[1]); return e.length ? Math.max(...e) : null }
 
@@ -47,7 +51,9 @@ async function run(slug, time) {
   if (c.anchor && !a) err.push(`중심 ${c.anchor.name} 이 코스에 없음`)
   if (a) {
     const ap = places.get(a.id)
-    if (ap?.fit === 0) err.push(`적합도 0점 중심: ${a.name}`)
+    // 저녁엔 밤 4점 이상이면 낮 0점이어도 허용(을지로 노가리골목 등) — api/course.js anchorOk 와 같은 규칙
+    if (ap?.fit === 0 && !(time === 'evening' && (ap?.night ?? 0) >= 4)) err.push(`적합도 0점 중심: ${a.name}`)
+    if (p.spot && haversine2(a, { lng: p.c[0], lat: p.c[1] }) > 950) err.push(`중심 ${a.name} 이 출발역에서 ${haversine2(a, { lng: p.c[0], lat: p.c[1] })}m`)
     if (time === 'evening' && ap?.night === 0) err.push(`밤 0점 중심: ${a.name}`)
     for (const s of c.stops) { const m = meters(a, s); if (m > 1100) err.push(`${s.name} 중심에서 ${m}m`) }
   }

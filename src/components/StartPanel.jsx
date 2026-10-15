@@ -12,6 +12,10 @@ export const POPULAR = [
   { label: '익선동', center: [126.9893, 37.5741], spot: true },
   { label: '이태원역', center: [126.9945, 37.5345], spot: true },
   { label: '한강진역', center: [127.0018, 37.5396], spot: true },
+  { label: '연남동', center: [126.9225, 37.5627], spot: true },
+  { label: '망원역', center: [126.9105, 37.5560], spot: true },
+  { label: '을지로3가역', center: [126.9926, 37.5663], spot: true },
+  { label: '석촌호수', center: [127.1040, 37.5097], spot: true },
   { label: '천안 불당동', center: [127.1095, 36.8125] },
   { label: '천안 신부동', center: [127.1556, 36.8196] },
 ]
