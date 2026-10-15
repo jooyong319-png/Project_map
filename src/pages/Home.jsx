@@ -193,11 +193,11 @@ export default function Home() {
   }
 
   // 🧭 AI 코스 짜기 — 지역 + 테마(선택) + 출발점(역) + 차
-  const onCourse = async (bbox, theme = '', from = null, car = false, time = 'day', fixed = null) => {
+  const onCourse = async (bbox, theme = '', from = null, car = false, time = 'day', fixed = null, exclude = []) => {
     setCourseLoading(true)
     setCourse(null)
     try {
-      const c = await getCourse(bbox, theme, from, car, time, fixed)
+      const c = await getCourse(bbox, theme, from, car, time, fixed, exclude)
       if (c?.limited) {
         setCourse(null)
         setMode('start')
@@ -247,8 +247,9 @@ export default function Home() {
     if (!lastReq) return
     if (aiUsedUp()) { say(`오늘 AI 코스는 ${AI_PER_DAY}번까지예요. 내일 다시 만나요 🧭`); return }
     const q = reqOf(lastReq)
+    const prev = (course?.stops || []).map((s) => s.id) // 직전 코스 장소는 빼고
     setOpenItem(null)
-    onCourse(q.bbox, q.theme, q.from, q.car, q.time, q.fixed)
+    onCourse(q.bbox, q.theme, q.from, q.car, q.time, q.fixed, prev)
   }
   const backToStart = () => { setCourse(null); setCourseLoading(false); setOpenItem(null); setMode('start') }
   const summaryLabel = lastReq ? [lastReq.nearFixed ? null : lastReq.label, lastReq.fixed ? `${lastReq.fixed.time} ${lastReq.fixed.label} 전` : lastReq.time === 'evening' ? '저녁' : '낮', lastReq.mood && ({ cafe: '감성 카페', food: '맛집 투어', walk: '산책', art: '전시·구경', hanok: '한옥·골목' })[lastReq.mood]].filter(Boolean).join(' · ') : ''

@@ -89,22 +89,26 @@ function fillTimes(stops, evening, startMin = null) {
   }
 }
 
-async function gatherCandidates(bbox, evening = false) {
+// exclude = 직전 코스 장소 id ('다른 코스'에서 같은 가게가 반복되지 않게). 빼고 나서 너무 적어지면 그 종류는 빼지 않는다
+async function gatherCandidates(bbox, evening = false, exclude = new Set()) {
   const local = placesIn(bbox).map((p) => ({ ...p, region: p.region || p.addr || '' })).filter((p) => !(evening && closesEarly(p)))
+  const fresh = (list, min) => { const f = list.filter((p) => !exclude.has(p.id)); return f.length >= min ? f : list }
   if (local.length) {
     // ① 중심 관광지: 최고점대에서 무작위(다시 짜면 다른 중심) → ② 그 1km 안에서 맛집·카페·다른 구경거리
     const sights = local.filter((p) => p.kind === 'travel' && anchorOk(p, evening)).sort((a, b) => anchorScore(b, evening) - anchorScore(a, evening))
-    // 1등 근처 점수대(-5점 이내)에서 고르게 무작위 — 동점이 많을 때 앞쪽만 뽑히지 않게
+    // 1등 근처 점수대(-5점 이내)에서 고르게 무작위 — 동점이 많을 때 앞쪽만 뽑히지 않게. 직전 중심은 다른 후보가 있으면 피한다
     const best = sights.length ? anchorScore(sights[0], evening) : 0
-    const anchor = sights.length ? shuffle(sights.filter((p) => anchorScore(p, evening) >= best - 5))[0] : null
+    const anchor = sights.length ? shuffle(fresh(sights.filter((p) => anchorScore(p, evening) >= best - 5), 1))[0] : null
     const near = anchor ? local.filter((p) => p === anchor || haversine(anchor, p) <= ANCHOR_RADIUS) : local
     const food = near.filter((p) => p.kind === 'food')
     // 같은 tier 안에선 티맵 인기(pop) 있는 곳이 먼저 오도록 tier 에 소수점 가산
     const withPop = (tier) => (p) => { const t = tier(p); return t < 0 ? t : t + Math.min(p.pop || 0, 9) / 10 }
+    const meals = fresh(food.filter((p) => p.cat !== '카페' && mealTier(p) >= 0), 3)
+    const cafes = fresh(food.filter((p) => p.cat === '카페'), 1)
     return {
       anchor,
-      food: [...pick(food.filter((p) => p.cat !== '카페'), withPop(mealTier), 14), ...pick(food.filter((p) => p.cat === '카페'), withPop(cafeTier), 8)],
-      travel: [...(anchor ? [anchor] : []), ...pick(near.filter((p) => p.kind === 'travel' && p !== anchor), sightTier, 10)],
+      food: [...pick(meals, withPop(mealTier), 14), ...pick(cafes, withPop(cafeTier), 8)],
+      travel: [...(anchor ? [anchor] : []), ...pick(fresh(near.filter((p) => p.kind === 'travel' && p !== anchor), 1), sightTier, 10)],
       stay: [],
     }
   }
@@ -324,7 +328,8 @@ export default async function handler(req, res) {
     if (!bbox) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
     // 낮/저녁: 화면의 '언제' 버튼(time=evening) 또는 테마 글자(저녁·밤·야경…). 정해 둔 일정이 있으면 시작 시각으로
     const evening = fixedAt ? fixedStart >= toMin(17, 0) : (req.query?.time === 'evening' || isEvening(theme))
-    const cand = await gatherCandidates(bbox, evening)
+    const exclude = new Set((req.query?.ex || '').toString().split(',').filter(Boolean).slice(0, 30)) // 다른 코스: 직전 장소 제외
+    const cand = await gatherCandidates(bbox, evening, exclude)
     const total = cand.food.length + cand.travel.length + cand.stay.length
     if (total < 2) { res.status(200).json({ course: null, reason: 'empty' }); return }
     const key = process.env.GEMINI_API_KEY
