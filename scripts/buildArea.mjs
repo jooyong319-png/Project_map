@@ -8,6 +8,9 @@
 //  · 출력: src/data/places/<slug>.json
 //
 // 실행:  node scripts/buildArea.mjs seongsu
+//        node scripts/buildArea.mjs seongsu --refresh-hours [--days 30] [--max 300]
+//          → 다시 빌드하지 않고 이용시간·쉬는 날만 갱신 (받은 지 days 일 넘은 것부터 max 건까지).
+//            전체 재빌드는 AI 적합도 점수까지 다시 매겨 코스가 흔들리므로 월 1회 갱신은 이쪽으로.
 // 동네 추가는 아래 AREAS 에 한 줄.
 
 import fs from 'node:fs'
@@ -225,7 +228,7 @@ async function readTour(area, key) {
     if (!intro) {
       const body = await tourGet('detailIntro2', { contentId: it.contentid, contentTypeId: type }, key)
       intro = body?.items?.item?.[0]
-      if (intro) { cache[it.contentid] = intro; fresh++ } else { intro = {}; failed++ }
+      if (intro) { cache[it.contentid] = { ...intro, _at: today() }; fresh++ } else { intro = {}; failed++ }
     }
     const cat = t.cat || catOf(clean(it.title), '', clean(intro.firstmenu) + ' ' + clean(intro.treatmenu))
     rows.push({
@@ -248,12 +251,53 @@ async function readTour(area, key) {
 const TOUR_CACHE = path.join(RAW, 'tourapi_intro_cache.json')
 function readTourCache() { try { return JSON.parse(fs.readFileSync(TOUR_CACHE, 'utf8')) } catch (_) { return {} } }
 function writeTourCache(c) { fs.writeFileSync(TOUR_CACHE, JSON.stringify(c), 'utf8') }
+const today = () => new Date().toISOString().slice(0, 10)
+
+// 이용시간만 갱신 — 동네 JSON 의 관광공사 항목(t_… 또는 인허가와 합친 tour_id)을 오래된 캐시부터 다시 받는다.
+//  캐시에 받은 날(_at)이 없는 건(2026-10-16 이전) 가장 오래된 것으로 친다. 하루 1,000건 한도라 max 로 끊는다.
+async function refreshHours(slug, key, days, max) {
+  const file = path.join(ROOT, 'src', 'data', 'places', `${slug}.json`)
+  if (!fs.existsSync(file)) { console.error(`${slug}.json 없음 — 먼저 빌드하세요`); process.exit(1) }
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+  const cache = readTourCache()
+  const age = (cid) => (cache[cid]?._at ? Date.parse(cache[cid]._at) : 0)
+  const limit = Date.now() - days * 864e5
+  const TYPE_OF_CAT = { 관광지: 12, 문화시설: 14, 레포츠: 28, 쇼핑: 38 }
+  const all = data.places
+    .map((p) => ({ p, cid: (p.tour_id || (p.src === 'tourapi' ? p.id : '')).replace(/^t_/, '') }))
+    .filter((x) => x.cid)
+  const targets = all.filter((x) => age(x.cid) < limit).sort((a, b) => age(a.cid) - age(b.cid)).slice(0, max)
+  let got = 0, changed = 0, failed = 0
+  for (const { p, cid } of targets) {
+    const type = +(cache[cid]?.contenttypeid || TYPE_OF_CAT[p.cat] || (p.kind === 'food' ? 39 : 0))
+    const t = TYPES[type]
+    if (!t) { failed++; continue }
+    const body = await tourGet('detailIntro2', { contentId: cid, contentTypeId: type }, key)
+    const intro = body?.items?.item?.[0]
+    if (!intro) { if (++failed >= 5 && !got) break; continue } // 처음부터 연속 실패 = 한도 초과로 보고 멈춤
+    cache[cid] = { ...intro, _at: today() }; got++
+    const hours = { use: clean(intro[t.use]), rest: clean(intro[t.rest]) }
+    if (hours.use !== (p.hours?.use || '') || hours.rest !== (p.hours?.rest || '')) { p.hours = hours; changed++ }
+    if (t.kind === 'food' && clean(intro.firstmenu)) p.menu = clean(intro.firstmenu)
+  }
+  writeTourCache(cache)
+  if (got) { data.hoursAt = today(); fs.writeFileSync(file, JSON.stringify(data) + '\n', 'utf8') }
+  const left = all.filter((x) => age(x.cid) < limit).length
+  console.log(`${slug} 이용시간 갱신: 대상 ${all.length}곳 중 ${targets.length}곳 요청 → 받음 ${got} · 바뀜 ${changed} · 실패 ${failed} · 아직 오래된 것 ${left}곳`)
+  if (failed && !got) console.log('⚠️ 하나도 못 받음 — 하루 한도 초과일 수 있음. 내일 다시.')
+}
 
 async function main() {
-  const slug = process.argv[2] || 'seongsu'
+  const args = process.argv.slice(2)
+  const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? +args[i + 1] : def }
+  const slug = args.find((a, i) => !a.startsWith('--') && !['--days', '--max'].includes(args[i - 1])) || 'seongsu'
   const area = AREAS[slug]
   if (!area) { console.error(`모르는 동네: ${slug} (scripts/buildArea.mjs 의 AREAS 에 추가)`); process.exit(1) }
   const env = loadEnv()
+  if (args.includes('--refresh-hours')) {
+    if (!env.TOUR_API_KEY) { console.error('TOUR_API_KEY 없음'); process.exit(1) }
+    return refreshHours(slug, env.TOUR_API_KEY, opt('--days', 30), opt('--max', 300))
+  }
   const t0 = Date.now()
 
   const general = await readLicense(path.join(RAW, '식품_일반음식점.csv'), area, null)
