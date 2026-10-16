@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import { parsePlan } from '../lib/places'
 
 // 첫 화면 — "오늘 어디서 데이트해요?" : 어디서(동네·역) · 언제(낮/저녁) · 분위기 · 🚗 → 코스 짜기
+//  맨 위 한 문장 입력("밤 8시에 올댓재즈 갈 건데 1시쯤 만나서 점심부터") → /api/plan 이 조건을 뽑아 아래 폼을 채운다.
+//  바로 짜지 않고 칩으로 보여 준 뒤 사용자가 확인·수정하고 버튼을 누른다(장소 이름은 카카오 검색 첫 결과로 연결).
 // 시안: 콕콕콕 코스 퍼스트 시안(Artifact) ①/③
 
 // 데이터가 준비된 동네(src/data/places)만 — 역·장소는 spot:true → 그 지점 주변 걸어갈 범위로 좁히고 거기서 출발
@@ -43,6 +46,14 @@ export default function StartPanel({ onSubmit, onBrowse, remaining, initial }) {
   const [fsugs, setFsugs] = useState([])
   const fPickedRef = useRef(false)
   const [ftime, setFtime] = useState(initial?.fixed?.time || '20:00')
+  // 만나는 시각·첫 순서·직접 쓴 요청 — 한 문장 입력이 채우거나, 시각은 폼에서 고른다
+  const [start, setStart] = useState(initial?.start || '')
+  const [first, setFirst] = useState(initial?.first || '')
+  const [wish, setWish] = useState(initial?.wish || '')
+  const [line, setLine] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [parsed, setParsed] = useState(!!(initial?.start || initial?.first || initial?.wish))
+  const [lineErr, setLineErr] = useState('')
   useEffect(() => {
     if (fPickedRef.current) { fPickedRef.current = false; setFsugs([]); return }
     const term = fq.trim()
@@ -61,6 +72,50 @@ export default function StartPanel({ onSubmit, onBrowse, remaining, initial }) {
   const pickFixed = (s) => { fPickedRef.current = true; setFixed({ label: s.name, lng: s.lng, lat: s.lat }); setFq(s.name); setFsugs([]) }
   const TIMES = []
   for (let h = 11; h <= 23; h++) for (const m of ['00', '30']) TIMES.push(`${String(h).padStart(2, '0')}:${m}`)
+  const START_TIMES = []
+  for (let h = 9; h <= 21; h++) for (const m of ['00', '30']) START_TIMES.push(`${String(h).padStart(2, '0')}:${m}`)
+  const withTime = (list, t) => (t && !list.includes(t) ? [...list, t].sort() : list) // 19:45 처럼 목록에 없는 시각도 보이게
+
+  // 한 문장 → 폼 채우기
+  const readLine = async () => {
+    const text = line.trim()
+    if (!text || parsing) return
+    setParsing(true); setLineErr('')
+    try {
+      const p = await parsePlan(text)
+      if (!p || p.limited) { setLineErr(p?.limited ? '잠시 후 다시 해 주세요' : '잘 못 알아들었어요. 아래에서 직접 골라 주세요'); return }
+      const st = p.start || (p.first === '점심' ? '12:00' : p.first === '저녁' ? '18:00' : '')
+      setStart(st); setFirst(p.first); setWish(p.wish); setMood(p.mood)
+      if (p.car) setCar(true)
+      if (st) setTime(st >= '17:00' ? 'evening' : 'day')
+      let center = loc?.center || null
+      let g = null
+      if (p.where) {
+        g = (await (await fetch(`/api/geocode?q=${encodeURIComponent(p.where)}`)).json()).results?.[0] || null
+        if (g) center = [g.lng, g.lat]
+        else { setLoc(null); setQ(p.where) } // 못 찾으면 검색어로 남겨 목록에서 고르게
+      }
+      let gotFixed = false
+      if (p.fixedTime || p.fixedName) {
+        setHasFixed(true)
+        if (p.fixedTime) setFtime(p.fixedTime)
+        setFixed(null); setFq('')
+        if (p.fixedName) {
+          const bb = center ? `&bbox=${center[0] - 0.03},${center[1] - 0.03},${center[0] + 0.03},${center[1] + 0.03}` : ''
+          const s = (await (await fetch(`/api/suggest?q=${encodeURIComponent(p.fixedName)}&kind=all${bb}`)).json()).results?.[0]
+          if (s) { pickFixed(s); gotFixed = true } else setFq(p.fixedName)
+        }
+      }
+      // 동네가 '동' 단위(넓음)인데 정해 둔 가게를 찾았으면 → 동네는 비우고 그 가게 근처로 짠다
+      if (g && !(gotFixed && g.kind === 'region')) pick([g.lng, g.lat], g.label, g.kind === 'station' || g.kind === 'spot')
+      else if (g) { setLoc(null); setQ('') }
+      setParsed(true)
+    } catch (_) {
+      setLineErr('잘 못 알아들었어요. 아래에서 직접 골라 주세요')
+    } finally {
+      setParsing(false)
+    }
+  }
 
   useEffect(() => {
     if (pickedRef.current) { pickedRef.current = false; setSugs([]); return }
@@ -83,9 +138,19 @@ export default function StartPanel({ onSubmit, onBrowse, remaining, initial }) {
     if (!ready) return
     const m = MOODS.find((x) => x.key === mood)
     const where = loc || { center: [fx.lng, fx.lat], label: fx.label, spot: false, nearFixed: true }
-    onSubmit({ ...where, time, mood, theme: m?.theme || '', car, fixed: fx })
+    onSubmit({ ...where, time, mood, theme: m?.theme || '', car, fixed: fx, start, first, wish })
   }
-  const submitLabel = fx ? `${fx.time} ${fx.label} 가기 전 코스 짜기` : loc ? `${loc.label}에서 코스 짜기` : '동네나 역을 골라 주세요'
+  const submitLabel = fx ? `${start ? `${start}부터 ` : ''}${fx.time} ${fx.label} 가기 전 코스 짜기` : loc ? `${loc.label}에서 ${start ? `${start}부터 ` : ''}코스 짜기` : '동네나 역을 골라 주세요'
+  // 알아들은 내용 칩(폼 값 기준이라 아래에서 고치면 같이 바뀐다)
+  const chips = parsed ? [
+    loc ? { k: 'loc', t: `📍 ${loc.label}` } : fx && { k: 'loc', t: `📍 ${fx.label} 근처` },
+    start && { k: 'start', t: `🕐 ${start} 만남`, x: () => setStart('') },
+    first && { k: 'first', t: `${first === '카페' ? '☕' : first === '구경' ? '👀' : '🍽️'} ${first}부터`, x: () => setFirst('') },
+    hasFixed && { k: 'fixed', t: fx ? `🎯 ${fx.time} ${fx.label}` : `🎯 ${ftime} 어디인지 골라 주세요`, warn: !fx },
+    mood && { k: 'mood', t: MOODS.find((x) => x.key === mood)?.label, x: () => setMood('') },
+    car && { k: 'car', t: '🚗 차로' },
+    wish && { k: 'wish', t: `💬 ${wish}`, x: () => setWish('') },
+  ].filter(Boolean) : []
 
   return (
     <div className="cf-start">
@@ -93,6 +158,27 @@ export default function StartPanel({ onSubmit, onBrowse, remaining, initial }) {
         <h1 className="cf-h1">오늘 어디서<br />데이트해요?</h1>
         <p className="cf-lead">동네나 역만 고르면, 지금 영업 중인 곳으로 하루 코스를 짜 드려요.</p>
       </div>
+
+      <div className="cf-one">
+        <textarea
+          rows={2} value={line} aria-label="한 문장으로 말하기"
+          onChange={(e) => setLine(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); readLine() } }}
+          placeholder={'한 문장으로 말해도 돼요\n예) 밤 8시에 올댓재즈 갈 건데, 1시쯤 만나서 점심부터'}
+        />
+        <button type="button" onClick={readLine} disabled={!line.trim() || parsing}>{parsing ? '읽는 중…' : '알아서 채우기'}</button>
+      </div>
+      {lineErr && <div className="cf-fixed-hint">{lineErr}</div>}
+      {chips.length > 0 && (
+        <div className="cf-parsed" aria-live="polite">
+          <div className="cf-parsed-h">이렇게 알아들었어요 <small>아래에서 고칠 수 있어요</small></div>
+          <div className="cf-parsed-chips">
+            {chips.map((c) => (
+              <span key={c.k} className={`cf-pchip ${c.warn ? 'warn' : ''}`}>{c.t}{c.x && <button type="button" aria-label="빼기" onClick={c.x}>×</button>}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <label className="cf-label" htmlFor="cf-where">어디서</label>
       <div className="cf-search">
@@ -126,6 +212,13 @@ export default function StartPanel({ onSubmit, onBrowse, remaining, initial }) {
           <button type="button" className={time === 'evening' ? 'on' : ''} aria-pressed={time === 'evening'} onClick={() => setTime('evening')}>저녁 · 퇴근 후</button>
         </div>
       )}
+      <label className="cf-fixed-row cf-start-time">
+        <span>만나는 시각</span>
+        <select value={start} onChange={(e) => { setStart(e.target.value); if (e.target.value) setTime(e.target.value >= '17:00' ? 'evening' : 'day') }}>
+          <option value="">{hasFixed ? '알아서 (3시간 전부터)' : '알아서'}</option>
+          {withTime(START_TIMES, start).map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </label>
       <label className="cf-car cf-fixed-toggle">
         <span>정해 둔 일정이 있어요 <small>그 전을 채워 드려요</small></span>
         <input type="checkbox" checked={hasFixed} onChange={(e) => setHasFixed(e.target.checked)} />
@@ -148,10 +241,10 @@ export default function StartPanel({ onSubmit, onBrowse, remaining, initial }) {
           <label className="cf-fixed-row">
             <span>몇 시</span>
             <select value={ftime} onChange={(e) => setFtime(e.target.value)}>
-              {TIMES.map((t) => <option key={t} value={t}>{t}</option>)}
+              {withTime(TIMES, ftime).map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </label>
-          {!fixed && fq.trim() && <div className="cf-fixed-hint">목록에서 가게를 골라 주세요</div>}
+          {!fixed && <div className="cf-fixed-hint">{fq.trim() ? '목록에서 가게를 골라 주세요' : '어디예요? 가게 이름을 넣어 주세요'}</div>}
         </div>
       )}
 

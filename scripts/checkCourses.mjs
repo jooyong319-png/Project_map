@@ -2,7 +2,8 @@
 //  고치다가 다른 데가 조용히 깨지는 걸 막는 용도 (2026-10-13: 지도 FitBounds·검색 핀 버그처럼).
 //  ❌ 오류(exit 1): 중심 관광지 누락 · 중심에서 1km 초과 · 적합도 0점 중심 · 저녁에 19시 전 마감 · 같은 장소 중복 · 코스 생성 실패
 //  ⚠️ 경고: 예상 시각이 이용시간 밖(timeOk=false) · 도보 25분 넘는 구간 · 장소 3곳 미만
-//  Gemini 를 실제로 부른다(동네×2회). 실행: node scripts/checkCourses.mjs [slug…]
+//  + PLANS: 만나는 시각·첫 순서·정해 둔 일정이 지켜지는지.
+//  Gemini 를 실제로 부른다(동네×2회 + PLANS). 실행: node scripts/checkCourses.mjs [slug…]
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -65,8 +66,43 @@ async function run(slug, time) {
   return { slug, time, c, err, warn }
 }
 
+// 시작 시각·첫 순서·정해 둔 일정 (한 문장 입력 "밤 8시에 올댓재즈, 1시쯤 만나서 점심부터")
+const PLANS = [
+  { slug: 'itaewon', label: '이태원 13시 점심부터 → 🎯20:00 올댓재즈', st: '13:00', first: '점심', fixed: { label: '올댓재즈', lng: 126.9926, lat: 37.5338, time: '20:00' } },
+  { slug: 'seongsu', label: '성수 15시 카페부터', st: '15:00', first: '카페' },
+]
+async function runPlan(pl) {
+  const p = POINTS[pl.slug], d = 0.012
+  const res = { code: 200, status(c) { res.code = c; return res }, json(o) { res.o = o; return res }, setHeader() {}, end() {} }
+  const query = { bbox: `${p.c[0] - d},${p.c[1] - d},${p.c[0] + d},${p.c[1] + d}`, from: p.label, fx: p.c[0], fy: p.c[1], st: pl.st, first: pl.first }
+  if (pl.fixed) Object.assign(query, { fixed: pl.fixed.label, kx: pl.fixed.lng, ky: pl.fixed.lat, kt: pl.fixed.time })
+  await course({ query, method: 'GET', headers: { 'x-forwarded-for': `check-${n++}` } }, res)
+  const c = res.o?.course, err = [], warn = []
+  if (!c) return { c, err: [`코스 생성 실패 (${res.code} ${res.o?.error || ''})`], warn }
+  const min = (t) => { const [h, m] = t.split(':'); return +h * 60 + +m }
+  const s0 = c.stops[0]
+  if (Math.abs(min(s0.time) - min(pl.st)) > 30) err.push(`첫 장소 ${s0.time} — 시작 ${pl.st} 과 30분 넘게 차이`)
+  const isMeal = (s) => s.kind === 'food' && s.cat !== '카페'
+  if ((pl.first === '점심' || pl.first === '저녁') && !isMeal(s0)) err.push(`첫 장소가 식사가 아님: ${s0.name}`)
+  if (pl.first === '카페' && s0.cat !== '카페') err.push(`첫 장소가 카페가 아님: ${s0.name}`)
+  if (pl.fixed) {
+    if (c.fixed?.late) err.push(`정해 둔 ${pl.fixed.time} 에 늦음`)
+    if (c.fixed?.walk?.min > 15) warn.push(`마지막 → 정해 둔 곳 도보 ${c.fixed.walk.min}분`)
+    if (c.stops.length < 4) warn.push(`7시간인데 ${c.stops.length}곳뿐`)
+  }
+  return { c, err, warn }
+}
+
 const slugs = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(POINTS)
 let errors = 0
+for (const pl of PLANS) {
+  if (!slugs.includes(pl.slug)) continue
+  const r = await runPlan(pl)
+  errors += r.err.length
+  console.log(`${r.err.length ? '❌' : r.warn.length ? '⚠️' : '✅'} ${pl.label} — ${r.c ? r.c.stops.map((s) => `${s.time} ${s.name}`).join(' → ') + (r.c.fixed ? ` → 🎯${r.c.fixed.time}` : '') : ''}`)
+  for (const e of r.err) console.log(`     ❌ ${e}`)
+  for (const w of r.warn) console.log(`     ⚠️ ${w}`)
+}
 for (const slug of slugs) {
   for (const time of ['day', 'evening']) {
     const r = await run(slug, time)

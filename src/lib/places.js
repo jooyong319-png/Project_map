@@ -10,15 +10,27 @@ export function isKorea(lat, lng) {
 // car = 🚗 차로 가요 → 응답에 주차장(parking) / time = 'day' | 'evening'
 // fixed = { label, lng, lat, time } — 정해 둔 일정(그 시각에 그곳). 코스는 그 전을 채운다
 // exclude = 직전 코스 장소 id ('다른 코스'에서 같은 가게 반복 방지)
-export async function getCourse(bbox, theme = '', from = null, car = false, time = 'day', fixed = null, exclude = []) {
+// extra = { start "HH:MM", first 점심|저녁|카페|구경, wish } — 만나는 시각·첫 순서·직접 쓴 요청
+export async function getCourse(bbox, theme = '', from = null, car = false, time = 'day', fixed = null, exclude = [], extra = null) {
   try {
     const t = theme ? `&theme=${encodeURIComponent(theme)}` : ''
     const f = from ? `&from=${encodeURIComponent(from.label)}&fx=${from.lng}&fy=${from.lat}` : ''
     const k = fixed ? `&fixed=${encodeURIComponent(fixed.label)}&kx=${fixed.lng}&ky=${fixed.lat}&kt=${fixed.time}` : ''
     const x = exclude?.length ? `&ex=${encodeURIComponent(exclude.join(','))}` : ''
-    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}${k}${x}${car ? '&car=1' : ''}&time=${time}`)
+    const e = ['start:st', 'first:first', 'wish:wish'].map((kv) => { const [a, b] = kv.split(':'); return extra?.[a] ? `&${b}=${encodeURIComponent(extra[a])}` : '' }).join('')
+    const res = await fetch(`/api/course?bbox=${bbox.join(',')}${t}${f}${k}${x}${e}${car ? '&car=1' : ''}&time=${time}`)
     if (res.status === 429) return { limited: true } // 서버 호출 제한
     if (res.ok) return (await res.json()).course || null
+  } catch (_) {}
+  return null
+}
+
+// 한 문장 → 코스 조건 ({ where, start, first, fixedName, fixedTime, mood, car, wish }). 실패면 null, 제한이면 { limited }
+export async function parsePlan(q) {
+  try {
+    const res = await fetch(`/api/plan?q=${encodeURIComponent(q)}`)
+    if (res.status === 429) return { limited: true }
+    if (res.ok) return (await res.json()).plan || null
   } catch (_) {}
   return null
 }

@@ -126,9 +126,9 @@ export default function Home() {
     mapBoundsRef.current = b
     // 지역 이동 후 도착하면(지도가 영역 보고) 그때 AI 코스 / 일반 검색
     if (pendingCourseRef.current) {
-      const { bbox, theme, from, car, time, fixed } = pendingCourseRef.current
+      const { bbox, theme, from, car, time, fixed, extra } = pendingCourseRef.current
       pendingCourseRef.current = null
-      onCourse(bbox, theme, from, car, time, fixed)
+      onCourse(bbox, theme, from, car, time, fixed, [], extra)
       return
     }
     if (pendingSearchRef.current) {
@@ -193,11 +193,12 @@ export default function Home() {
   }
 
   // 🧭 AI 코스 짜기 — 지역 + 테마(선택) + 출발점(역) + 차
-  const onCourse = async (bbox, theme = '', from = null, car = false, time = 'day', fixed = null, exclude = []) => {
+  // extra = { start, first, wish } — 만나는 시각·첫 순서·직접 쓴 요청(한 문장 입력)
+  const onCourse = async (bbox, theme = '', from = null, car = false, time = 'day', fixed = null, exclude = [], extra = null) => {
     setCourseLoading(true)
     setCourse(null)
     try {
-      const c = await getCourse(bbox, theme, from, car, time, fixed, exclude)
+      const c = await getCourse(bbox, theme, from, car, time, fixed, exclude, extra)
       if (c?.limited) {
         setCourse(null)
         setMode('start')
@@ -221,7 +222,7 @@ export default function Home() {
   const reqOf = (r) => {
     const d = r.spot || r.nearFixed ? 0.012 : 0.02 // 역·정해 둔 곳 ≈1.2km / 동네 ≈2km 박스
     const c = r.center
-    return { bbox: [c[0] - d, c[1] - d, c[0] + d, c[1] + d], theme: r.theme, car: r.car, time: r.time, from: r.spot ? { label: r.label, lng: c[0], lat: c[1] } : null, fixed: r.fixed || null }
+    return { bbox: [c[0] - d, c[1] - d, c[0] + d, c[1] + d], theme: r.theme, car: r.car, time: r.time, from: r.spot ? { label: r.label, lng: c[0], lat: c[1] } : null, fixed: r.fixed || null, extra: r.start || r.first || r.wish ? { start: r.start, first: r.first, wish: r.wish } : null }
   }
   // 시작 폼 제출 → 그 동네로 날아가 도착하면 코스 생성(onBoundsChange 에서 트리거)
   const startCourse = (r) => {
@@ -239,7 +240,7 @@ export default function Home() {
       const p = pendingCourseRef.current
       if (!p) return
       pendingCourseRef.current = null
-      onCourse(p.bbox, p.theme, p.from, p.car, p.time, p.fixed)
+      onCourse(p.bbox, p.theme, p.from, p.car, p.time, p.fixed, [], p.extra)
     }, 1600)
   }
   // 다른 코스 — 같은 조건으로 바로 다시(지도는 그대로)
@@ -249,10 +250,10 @@ export default function Home() {
     const q = reqOf(lastReq)
     const prev = (course?.stops || []).map((s) => s.id) // 직전 코스 장소는 빼고
     setOpenItem(null)
-    onCourse(q.bbox, q.theme, q.from, q.car, q.time, q.fixed, prev)
+    onCourse(q.bbox, q.theme, q.from, q.car, q.time, q.fixed, prev, q.extra)
   }
   const backToStart = () => { setCourse(null); setCourseLoading(false); setOpenItem(null); setMode('start') }
-  const summaryLabel = lastReq ? [lastReq.nearFixed ? null : lastReq.label, lastReq.fixed ? `${lastReq.fixed.time} ${lastReq.fixed.label} 전` : lastReq.time === 'evening' ? '저녁' : '낮', lastReq.mood && ({ cafe: '감성 카페', food: '맛집 투어', walk: '산책', art: '전시·구경', hanok: '한옥·골목' })[lastReq.mood]].filter(Boolean).join(' · ') : ''
+  const summaryLabel = lastReq ? [lastReq.nearFixed ? null : lastReq.label, lastReq.start && `${lastReq.start} 만남`, lastReq.fixed ? `${lastReq.fixed.time} ${lastReq.fixed.label} 전` : lastReq.start ? null : lastReq.time === 'evening' ? '저녁' : '낮', lastReq.mood && ({ cafe: '감성 카페', food: '맛집 투어', walk: '산책', art: '전시·구경', hanok: '한옥·골목' })[lastReq.mood]].filter(Boolean).join(' · ') : ''
 
   // 검색바 자동완성: 타이핑하면 전국 가게를 카카오로 제안
   useEffect(() => {
@@ -442,7 +443,7 @@ export default function Home() {
             <span className="sheet-grip" />
           </div>
           {mode === 'start' ? (
-            <StartPanel onSubmit={startCourse} onBrowse={() => setMode('browse')} remaining={Math.max(0, AI_PER_DAY - aiCount())} initial={lastReq && { label: lastReq.nearFixed ? '' : lastReq.label, loc: lastReq.nearFixed ? null : { center: lastReq.center, label: lastReq.label, spot: lastReq.spot }, fixed: lastReq.fixed, time: lastReq.time, mood: lastReq.mood, car: lastReq.car }} />
+            <StartPanel onSubmit={startCourse} onBrowse={() => setMode('browse')} remaining={Math.max(0, AI_PER_DAY - aiCount())} initial={lastReq && { label: lastReq.nearFixed ? '' : lastReq.label, loc: lastReq.nearFixed ? null : { center: lastReq.center, label: lastReq.label, spot: lastReq.spot }, fixed: lastReq.fixed, time: lastReq.time, mood: lastReq.mood, car: lastReq.car, start: lastReq.start, first: lastReq.first, wish: lastReq.wish }} />
           ) : mode === 'course' ? (
             <CourseView
               course={course}

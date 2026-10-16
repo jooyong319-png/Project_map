@@ -5,13 +5,14 @@ import kakaoHandler from './api/kakao.js'
 import geocodeHandler from './api/geocode.js'
 import suggestHandler from './api/suggest.js'
 import courseHandler from './api/course.js'
+import planHandler from './api/plan.js'
 
 // 로컬 개발용 /api 미들웨어 플러그인.
 // `npm run dev` 에서도 Vercel 함수(api/*.js)를 그대로 실행한다.
 function apiPlugin(env) {
   // 서버 사이드 핸들러가 읽는 process.env 에 .env 값을 주입
   Object.assign(process.env, env)
-  const routes = { '/api/place': placeHandler, '/api/kakao': kakaoHandler, '/api/geocode': geocodeHandler, '/api/suggest': suggestHandler, '/api/course': courseHandler }
+  const routes = { '/api/place': placeHandler, '/api/kakao': kakaoHandler, '/api/geocode': geocodeHandler, '/api/suggest': suggestHandler, '/api/course': courseHandler, '/api/plan': planHandler }
   return {
     name: 'local-api',
     configureServer(server) {

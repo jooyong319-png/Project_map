@@ -144,8 +144,27 @@ function heuristicCourse(cand) {
 
 // Gemini: 후보 목록을 주고 동선(고르기+순서+이유)을 JSON 으로 받는다. theme=테마, from=출발점(역)
 // fixed = { label, time, start } — 사용자가 정해 둔 일정(그 시각에 그곳). 코스는 그 전을 채우고 근처에서 끝난다
-async function geminiCourse(cand, key, theme, from = null, evening = isEvening(theme), fixed = null) {
+// plan = { start, end, first } — 시작·끝 시각을 알면 그 길이에 맞춰 곳 수·식사를 정한다(1시~8시면 점심부터 저녁까지)
+// wish = 사용자가 직접 쓴 추가 요청(한 문장 입력에서 나온 것)
+async function geminiCourse(cand, key, theme, from = null, evening = isEvening(theme), fixed = null, plan = null, wish = '') {
   const anchor = cand.anchor
+  let compose = evening
+    ? '- 저녁(18시 이후 시작) 코스야. 저녁 식사 1곳 → 걷기 좋은 곳·야경 1곳(있으면) → 와인바·바·이자카야·디저트 카페 중 1곳, 총 3~4곳. use(이용시간)를 보고 저녁에 문 닫는 곳(예: ~19:00 마감, 브런치·낮 카페)은 빼.'
+    : '- 식사(kind=food, cat≠카페) 2곳(점심·저녁), 카페(cat=카페) 1곳, 구경(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→카페→구경→저녁 느낌). 후보가 모자라면 있는 만큼.'
+  if (plan) {
+    const s = toMin(...plan.start.split(':')), e = toMin(...plan.end.split(':'))
+    const n = Math.max(2, Math.min(6, Math.round((e - s) / 65))) // 한 곳에 이동 포함 65분쯤 (3시간 → 2~3곳, 7시간 → 5~6곳)
+    const over = (a, b) => s < b && e > a
+    const meals = [over(toMin(11, 0), toMin(14, 0)) && '점심', over(toMin(17, 30), toMin(20, 30)) && '저녁'].filter(Boolean)
+    compose = [
+      `- 코스는 ${plan.start}에 시작해 ${plan.end}까지야. 장소는 ${Math.max(2, n - 1)}~${n}곳.`,
+      meals.length ? `식사(kind=food, cat≠카페)는 ${meals.join('·')} ${meals.length}곳` : '식사는 넣지 말고',
+      fixed ? `(단, 정해 둔 곳이 식당이면 그 시각 식사는 거기서 하니 빼고, 술집·바·공연이면 그 전에 저녁 식사를 넣어)` : '',
+      ', 카페(cat=카페) 1곳, 나머지는 구경(kind=travel)으로 자연스럽게 섞어.',
+      plan.first ? ` 첫 장소는 꼭 ${plan.first === '점심' || plan.first === '저녁' ? `${plan.first} 식사(cat≠카페)` : plan.first === '카페' ? '카페' : '구경(kind=travel)'}로 해.` : '',
+      evening ? ' use(이용시간)를 보고 그 시각에 문 닫는 곳은 빼.' : '',
+    ].join('')
+  }
   const byId = new Map()
   const flat = []
   for (const k of ['stay', 'food', 'travel']) {
@@ -160,9 +179,7 @@ async function geminiCourse(cand, key, theme, from = null, evening = isEvening(t
     '규칙:',
     '- 후보에 있는 id 만 사용 (목록에 없는 곳은 절대 만들지 마).',
     '- 숙소(kind=stay)가 있으면 1곳을 베이스캠프로 맨 처음에 넣어. 없으면 생략.',
-    evening
-      ? '- 저녁(18시 이후 시작) 코스야. 저녁 식사 1곳 → 걷기 좋은 곳·야경 1곳(있으면) → 와인바·바·이자카야·디저트 카페 중 1곳, 총 3~4곳. use(이용시간)를 보고 저녁에 문 닫는 곳(예: ~19:00 마감, 브런치·낮 카페)은 빼.'
-      : '- 식사(kind=food, cat≠카페) 2곳(점심·저녁), 카페(cat=카페) 1곳, 구경(kind=travel) 2곳 정도를 섞어 자연스러운 하루 순서로 배치(점심→구경→카페→구경→저녁 느낌). 후보가 모자라면 있는 만큼.',
+    compose,
     '- 서로 걸어서 15분 안쪽으로 이어지게 가까운 곳끼리 골라 (region·주소 참고).',
     anchor ? `- 오늘의 중심 관광지는 "${anchor.name}"(id ${anchor.id})야. 반드시 코스에 넣고, 나머지는 그 주변으로 동선을 짜.` : '',
     from ? `- 출발점은 "${from.label}"이야. 첫 장소는 여기서 걸어서 가까운 곳으로 하고, 동선이 출발점에서 자연스럽게 이어지게 해. summary 에 출발점을 언급해.` : '',
@@ -170,9 +187,10 @@ async function geminiCourse(cand, key, theme, from = null, evening = isEvening(t
     '- 관광공사 소개 태그가 있는 곳은 이용시간이 확인된 곳이라 우선해. rest(쉬는 날)가 있으면 reason 끝에 "(○요일 휴무)"처럼 짧게 덧붙여.',
     '- since(영업 시작 연도, 오래될수록 검증된 곳)와 cat·tags 를 특징 근거로 참고해. 없는 정보(평점·후기 수 등)를 지어내지 마.',
     '- 각 stop 의 reason 은 한국어 한 문장, 친근하고 구체적으로.',
-    fixed ? `- 중요: 사용자는 ${fixed.time}에 "${fixed.label}"에 가기로 이미 정해 뒀어(후보 목록에 없는 곳, 코스에 넣지 마). 코스는 ${fixed.start}쯤 시작해서 ${fixed.time} 10분 전까지 끝나야 하고, 마지막 장소는 toFixed(그곳까지 거리, m)가 700 이하인 후보로 골라(꼭 지켜). 그곳이 식당·술집이면 앞 코스에선 식사 대신 카페·디저트·구경·산책 위주로 구성해. 2~4곳. summary 에 "${fixed.time} ${fixed.label} 가기 전"을 자연스럽게 넣어.` : '',
-    `- 각 stop 에 time(도착 예상 시각, 24시간제 "HH:MM")을 넣어. ${fixed ? `${fixed.start} 전후` : evening ? '18:30 전후' : '12:00 전후'}에 시작하고, 식사·카페는 약 1시간, 구경은 1~1.5시간 머문다고 보고 이동 시간을 더해. use(이용시간)가 있으면 그 안에 들어오게 순서와 시각을 맞춰.`,
+    fixed ? `- 중요: 사용자는 ${fixed.time}에 "${fixed.label}"에 가기로 이미 정해 뒀어(후보 목록에 없는 곳, 코스에 넣지 마). 코스는 ${fixed.start}쯤 시작해서 ${fixed.time} 10분 전까지 끝나야 하고, 마지막 장소는 toFixed(그곳까지 거리, m)가 700 이하인 후보로 골라(꼭 지켜). summary 에 "${fixed.time} ${fixed.label} 가기 전"을 자연스럽게 넣어.` : '',
+    `- 각 stop 에 time(도착 예상 시각, 24시간제 "HH:MM")을 넣어. ${plan ? `${plan.start}` : evening ? '18:30 전후' : '12:00 전후'}에 시작하고, 식사·카페는 약 1시간, 구경은 1~1.5시간 머문다고 보고 이동 시간을 더해. use(이용시간)가 있으면 그 안에 들어오게 순서와 시각을 맞춰.`,
     '- title 은 이 동선을 한 줄로 표현(예: "성수 감성 한 바퀴"), summary 는 한 문장 소개.',
+    wish ? `- 사용자가 직접 남긴 요청: "${wish}". 위 규칙과 부딪히지 않는 선에서 최대한 따라.` : '',
     th ? `- 사용자가 원하는 테마: "${th}". 이 테마 분위기에 맞게 장소를 고르고, 순서·이유·제목에도 테마를 자연스럽게 반영해.` : '',
     '후보:',
     JSON.stringify(flat),
@@ -332,12 +350,22 @@ export default async function handler(req, res) {
   const kx = Number(req.query?.kx), ky = Number(req.query?.ky)
   const kt = /^\d{1,2}:\d{2}$/.test(req.query?.kt || '') ? req.query.kt.padStart(5, '0') : null
   const fixedAt = req.query?.fixed && kt && Number.isFinite(kx) && Number.isFinite(ky) ? { label: req.query.fixed.toString().slice(0, 40), lng: kx, lat: ky, time: kt } : null
-  const fixedStart = fixedAt ? Math.max(toMin(10, 0), toMin(...fixedAt.time.split(':')) - 180) : null
-  if (fixedAt) fixedAt.start = hhmm(fixedStart)
+  // 만나는 시각(st "HH:MM") — 한 문장 입력("1시쯤 만나서 점심부터")이나 폼에서. 정해 둔 일정보다 1시간 이상 앞이어야 쓴다
+  const fixedMin = fixedAt ? toMin(...fixedAt.time.split(':')) : null
+  let startMin = /^\d{1,2}:\d{2}$/.test(req.query?.st || '') ? toMin(...req.query.st.split(':')) : null
+  if (startMin !== null && (startMin < toMin(7, 0) || (fixedMin !== null && startMin > fixedMin - 60))) startMin = null
+  if (startMin === null && fixedAt) startMin = Math.max(toMin(10, 0), fixedMin - 180) // 시각을 안 주면 3시간 전부터
+  if (fixedAt) fixedAt.start = hhmm(startMin)
+  const plan = startMin === null ? null : {
+    start: hhmm(startMin),
+    end: hhmm(fixedAt ? fixedMin - 10 : Math.min(startMin + 6 * 60, toMin(23, 30))), // 정해 둔 일정이 없으면 6시간쯤
+    first: ['점심', '저녁', '카페', '구경'].includes(req.query?.first) ? req.query.first : '',
+  }
+  const wish = (req.query?.wish || '').toString().slice(0, 80) // 사용자가 직접 쓴 추가 요청(예: "저녁은 빼 줘")
   try {
     if (!bbox) { res.status(200).json({ course: null, error: 'bbox 필요' }); return }
-    // 낮/저녁: 화면의 '언제' 버튼(time=evening) 또는 테마 글자(저녁·밤·야경…). 정해 둔 일정이 있으면 시작 시각으로
-    const evening = fixedAt ? fixedStart >= toMin(17, 0) : (req.query?.time === 'evening' || isEvening(theme))
+    // 낮/저녁: 화면의 '언제' 버튼(time=evening) 또는 테마 글자(저녁·밤·야경…). 시작 시각이 있으면 그걸로
+    const evening = plan ? startMin >= toMin(17, 0) : (req.query?.time === 'evening' || isEvening(theme))
     const exclude = new Set((req.query?.ex || '').toString().split(',').filter(Boolean).slice(0, 30)) // 다른 코스: 직전 장소 제외
     const cand = await gatherCandidates(bbox, evening, exclude, from || fixedAt)
     const total = cand.food.length + cand.travel.length + cand.stay.length
@@ -347,7 +375,7 @@ export default async function handler(req, res) {
     if (key) {
       // 일시적 실패(혼잡/타임아웃) 대비 최대 3회 재시도 후에만 휴리스틱 폴백
       for (let i = 0; i < 3 && !course; i++) {
-        try { course = await geminiCourse(cand, key, theme, from, evening, fixedAt) }
+        try { course = await geminiCourse(cand, key, theme, from, evening, fixedAt, plan, wish) }
         catch (_) { if (i < 2) await new Promise((r) => setTimeout(r, 400 * (i + 1))) }
       }
       if (!course) { course = heuristicCourse(cand); if (course) course.note = 'auto' } // 3회 다 실패 → 자동 구성
@@ -368,7 +396,8 @@ export default async function handler(req, res) {
         }
       }
     }
-    fillTimes(course.stops, evening, fixedStart) // 예상 시각 채우기 + 이용시간 안인지(timeOk)
+    fillTimes(course.stops, evening, startMin) // 예상 시각 채우기 + 이용시간 안인지(timeOk)
+    if (plan) course.plan = plan
     // 정해 둔 일정: 마지막 장소 → 그곳 도보, 늦지 않는지(마지막 장소에 최소 30분 머문다고 보고)
     if (fixedAt && course.stops?.length) {
       const last = course.stops[course.stops.length - 1]
