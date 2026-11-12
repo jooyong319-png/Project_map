@@ -1,12 +1,15 @@
 import { useEffect } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl' // v6 부터 기본 내보내기 없음
+// v6 은 지도 계산용 worker 를 별도 파일로 불러온다 → vite 가 자산으로 복사하게 하고 그 주소를 알려 준다
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '@maplibre/maplibre-gl-leaflet'
 
 // maplibre-gl-leaflet 플러그인은 전역 maplibregl 을 참조한다
 if (typeof window !== 'undefined') window.maplibregl = maplibregl
+maplibregl.setWorkerUrl(workerUrl)
 
 // 무료·키 불필요 벡터 타일 (OpenFreeMap). bright = 밝고 컬러풀, 정보 풍부.
 const STYLE = 'https://tiles.openfreemap.org/styles/bright'

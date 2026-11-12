@@ -8,6 +8,8 @@
 import { placesIn, parkingNear, areaOf } from '../lib/areas.js'
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+// 생각 토큰 상한 — 비용·대기 시간의 대부분이 여기서 나온다(상한 없으면 3.5k~9k 토큰). 환경변수에 빈 값을 주면 모델 기본(상한 없음)
+const THINKING = process.env.GEMINI_THINKING_BUDGET ?? '1024' // 2026-11-12 비교: 없음 24초·19원 / 1024 7초·6원 / 0 3초·3원, 점검 규칙 위반은 셋 다 0
 
 const d2 = (a, b) => { const dx = a.lng - b.lng, dy = a.lat - b.lat; return dx * dx + dy * dy }
 // 인기 신호 = 공공데이터만 (네이버 블로그 수는 약관상 코스 후보·AI 입력에 못 씀)
@@ -55,7 +57,12 @@ const sightTier = (p) => (p.cat === '쇼핑' ? 0 : 1) // 관광지·문화시설
 //  night 만 쓰지 않는 이유: 항목이 많은 동네(성수 80곳)에선 모델이 매장까지 night 5를 주는 등 과대평가 → fit 으로 눌러 준다
 const anchorScore = (p, evening = false) => (evening ? (p.night ?? 2) * 6 + (p.fit ?? 2) * 4 : (p.fit ?? 2) * 10) + Math.min(p.pop || 0, 30) / 3 + (curated(p) ? 2 : 0)
 // 중심 자격: 낮 0점(체육시설·기념비·음식 골목…)은 제외. 단 저녁엔 밤 4점 이상이면 허용 — 을지로 노가리골목·포장마차거리처럼 밤에만 빛나는 곳
-const anchorOk = (p, evening) => (evening ? p.night !== 0 && (p.fit !== 0 || (p.night ?? 0) >= 4) : p.fit !== 0)
+// 브랜드 지점·플래그십 매장("닥터마틴 아이파크몰 용산점", "룰루레몬 이태원 스토어") — 데이트 '중심'으론 어색.
+//  서울스카이(롯데백화점 에비뉴엘점)처럼 적합도 3 이상이면 예외. 적합도 1 이하(일반 매장)는 후보에서도 뺀다
+const BRAND_SHOP = /(점|스토어|플래그십|플래그쉽|매장|아울렛|직영)\s*$|플래그십|플래그쉽|스토어/
+const MALL = /^\S*(몰|백화점)(\s|$)/ // "아이파크몰 용산점"·"롯데백화점 잠실점" = 몰 자체(저녁에 갈 곳)라 매장으로 안 본다
+const brandShop = (p) => p.cat === '쇼핑' && (p.fit ?? 2) <= 2 && BRAND_SHOP.test(p.name || '') && !MALL.test(p.name || '')
+const anchorOk = (p, evening) => !brandShop(p) && (evening ? p.night !== 0 && (p.fit !== 0 || (p.night ?? 0) >= 4) : p.fit !== 0)
 const ANCHOR_FROM_MAX = 900 // 역에서 출발할 때 중심은 역에서 이 거리(m) 안 — 범위 사각형 모서리의 먼 명소(을지로3가역→인사동 1.1km)가 중심이 되지 않게
 // 이용시간에 적힌 마감이 19시 전이면 저녁엔 제외("11:00~18:00" 등). 시간 정보가 없으면 판단하지 않는다
 const closesEarly = (p) => {
@@ -118,7 +125,7 @@ async function gatherCandidates(bbox, evening = false, exclude = new Set(), from
     return {
       anchor,
       food: [...pick(meals, withPop(mealTier), 14), ...pick(cafes, withPop(cafeTier), 8)],
-      travel: [...(anchor ? [anchor] : []), ...pick(fresh(near.filter((p) => p.kind === 'travel' && p !== anchor), 1), sightTier, 10)],
+      travel: [...(anchor ? [anchor] : []), ...pick(fresh(near.filter((p) => p.kind === 'travel' && p !== anchor && !(brandShop(p) && (p.fit ?? 2) <= 1)), 1), sightTier, 10)],
       stay: [],
     }
   }
@@ -200,6 +207,7 @@ async function geminiCourse(cand, key, theme, from = null, evening = isEvening(t
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.7,
+      ...(THINKING !== undefined && THINKING !== '' ? { thinkingConfig: { thinkingBudget: Number(THINKING) } } : {}),
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'OBJECT',

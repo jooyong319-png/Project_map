@@ -160,6 +160,7 @@ export default async function handler(req, res) {
         id: 'k_' + p.id,
         name: p.place_name || '이름 없음',
         region: p.road_address_name || p.address_name || '',
+        jibun: p.address_name || '', // 지번 주소("성수동2가 …") — "성수 맛집" 같은 동네 필터용(도로명엔 동 이름이 없음)
         cat: c,
         lng: Number(p.x),
         lat: Number(p.y),

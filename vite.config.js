@@ -37,5 +37,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [react(), apiPlugin(env)],
+    // maplibre-gl v6 은 worker 파일을 import.meta.url 기준으로 따로 불러온다 → 사전 번들하면 경로가 깨짐
+    optimizeDeps: { exclude: ['maplibre-gl'] },
   }
 })

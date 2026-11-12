@@ -57,7 +57,7 @@ export async function getRestaurants(query = '', opts = {}) {
     let items = Array.isArray(data.places) ? data.places : []
     // 지역 한정: 주소에 그 지역명(예 "개봉")이 든 곳만 (개봉동만 보고 싶을 때). 비면 원래대로.
     if (opts.regionTerm) {
-      const f = items.filter((i) => (i.region || '').includes(opts.regionTerm))
+      const f = items.filter((i) => `${i.region || ''} ${i.jibun || ''}`.includes(opts.regionTerm))
       if (f.length) items = f
     }
     return { items, source: 'kakao', center: data.center || null } // center: 지역검색 시 지도 이동용
